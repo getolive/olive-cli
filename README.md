@@ -96,5 +96,4 @@ Standard GitHub Pull Requests are welcome. Please ensure unit tests (`pytest`) p
 ---
 ## License
 
-Apache License 2.0 © 2025 Olive AI, Inc.
-
+Apache License 2.0 © 2025 getolive.ai
