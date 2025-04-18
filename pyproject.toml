@@ -1,0 +1,39 @@
+[project]
+name = "olive"
+version = "0.1.0"
+description = "Olive CLI"
+
+dependencies = [
+    # --- CLI / UI ---
+    "typer>=0.9",
+    "rich>=13",
+    "prompt_toolkit>=3.0",
+
+    # --- Core ---
+    "pydantic>=2.6,<3",
+    "anyio>=4",
+    
+    # --- LLM / tokenisation ---
+    "openai>=1,<2",
+    "tiktoken>=0.6",
+
+    # --- YAML / config ---
+    "pyyaml>=6",
+
+    # --- File‑system notifications ---
+    "watchdog>=6",
+]
+
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=4",
+]
+
+[project.scripts]
+olive = "olive.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["olive*"]

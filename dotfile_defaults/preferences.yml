@@ -1,0 +1,66 @@
+context:
+  system_prompt_path: ~/.olive/my_system_prompt.txt
+  respect_gitignore: true
+  max_tokens: 85000
+  max_files: -1
+  max_lines_per_file: 1000
+  
+  abstract:
+    enabled: true # if false, then all includable files will be stuffed into the context in full (w/limits in this file)
+
+  include:
+    patterns:
+      - "*.html"
+      - "*.js"
+      - "*.ts"
+      - "*.css"
+      - "*.py"
+      - "*.md"
+      - "README*"
+      - "Makefile"
+      - "Dockerfile"
+    paths: 
+      - pyproject.toml
+
+  exclude:
+    patterns:
+      - "*.test.py"
+      - ".venv/**/*"
+      - ".git/**/*"
+    paths:
+      - legacy/unused_module.py
+
+builder_mode:
+  autonomy: yolo # { yolo | ask } where ask will pause for operations and auto will allow (using confidence threshold and context:include prefs)
+  confidence_threshold: 0.7
+  prompt_path: ~/.olive/builder_mode_prompt.txt
+
+sandbox:
+  enabled: true # if true, every tool and task runs out of the sandbox
+  disk: mount # { mount | copy } do you want to mount local disk so sandbox edits live files, or copy so local copy is preserved.
+
+code_smells:
+  enabled: true
+  linters:
+    - ale
+  flags:
+    no_todo_comments: true
+    enforce_type_hints: true
+    consistent_formatting: true
+
+ai:
+  provider: openai                      # this is used to identify provider:api_key: in credentials.yml to use (can be empty to pass no key in api calls)
+  base_url: https://api.openai.com/v1   # openai compatible: e.g., or http://localhost:11434, https://openrouter.ai/api/v1
+  model: chatgpt-4o-latest              # required 
+  #base_url: http://localhost:11434/v1
+  #model: gemma3:4b
+  #model: deepseek-r1:8b
+  temperature: 0.7                      # optional
+  timeout: 120                          # optional
+  tools:
+    mode: blacklist # { whitelist (only allow what's listed) | blacklist (allow anything except what's listed) }
+    whitelist: []
+    blacklist: ["wget"]
+
+ui:
+  prompt: "🫒"

@@ -1,0 +1,15 @@
+!.olive/specs
+!.olive/specs/
+!/Users/tw/Projects/olive/.olive/specs
+!/Users/tw/Projects/olive/olive-cli/.olive/specs
+!/mnt/project/.olive/specs
+*.egg-info/
+*__pycache__*
+.DS_Store
+.dockerignore
+.git
+.olive
+.olive/*
+.venv
+cli/olive.egg-info/*
+zipper.sh
