@@ -13,6 +13,10 @@ from typing import List
 import tiktoken
 import yaml
 from openai import OpenAI
+import openai
+import asyncio
+from olive.ui import console
+
 
 from olive.context import context
 from olive.logger import get_logger
@@ -147,7 +151,21 @@ class LLMProvider:
     def mock_ask(self, prompt: str):
         return self.build_payload(prompt, dry_run=True)
 
-    async def ask(self, prompt: str):
+    async def ask(
+        self,
+        prompt: str,
+        _depth: int = 0,
+        _max_depth: int = 8,  # recursion guard
+        _retries: int = 2,  # shared retry budget for recoverable errors
+        _retry_delay: float = 2.0,  # initial back‑off seconds
+    ):
+        """
+        Ask the LLM, dispatch tools, recurse with tool outputs.
+        Retries only on recoverable errors (rate‑limit, 5xx, connection).
+        Thread‑safe spinner via olive.ui.console_lock().
+        """
+
+        # ── Guard clauses ────────────────────────────────────────────────
         if not prompt.strip():
             logger.warning("llm.ask called with empty prompt. Skipping.")
             return
@@ -156,40 +174,88 @@ class LLMProvider:
             logger.warning("No API key or client available.")
             return "[Mocked response: no API key found]"
 
-        messages = self.build_payload(prompt)
+        if _depth >= _max_depth:
+            logger.warning("Max LLM recursion depth reached; aborting.")
+            return "[Aborted: too many tool cycles]"
 
+        # ── Helper: classify recoverable errors ──────────────────────────
+        def _is_recoverable(err: Exception) -> bool:
+            if isinstance(
+                err,
+                (
+                    openai.RateLimitError,
+                    openai.APIConnectionError,
+                ),
+            ):
+                # "insufficient_quota" → unrecoverable even if RateLimitError
+                return "insufficient_quota" not in str(err).lower()
+            if isinstance(err, openai.APIError):
+                status = getattr(err, "status_code", 0)
+                return 500 <= status < 600  # retry only on 5xx
+            return False  # 4xx auth / invalid‑request → unrecoverable
+
+        # ── 1. Call the model with limited retries ──────────────────────
         try:
-            from rich.console import Console
-
-            with Console().status("[bold cyan]Thinking...[/bold cyan]", spinner="dots"):
+            messages = self.build_payload(prompt)
+            with console.status("[bold cyan]Thinking…[/bold cyan]", spinner="dots"):
                 response = self.client.chat.completions.create(
-                    model=self.model, messages=messages, temperature=self.temperature
+                    model=self.model,
+                    messages=messages,
+                    temperature=self.temperature,
                 )
-
-            reply = response.choices[0].message.content.strip()
-            logger.info("Prompt and context sent to LLM.")
-
-            context.append_chat("user", prompt)
-            context.append_chat("assistant", reply)
-            context.save()
-
-            task_ids = tool_registry.process_llm_response_with_tools(
-                reply, dispatch=True
-            )
-            if isinstance(task_ids, list) and task_ids:
-                results = []
-                for tid in task_ids:
-                    result = await task_manager.wait_for_result(tid)
-                    print(f"⏳ Awaited tool task {tid}, got: [dim]{result}[/dim]")
-                    if result:
-                        results.append(result.output)
-                if results:
-                    followup = "\n\n".join(map(str, results))
-                    print(f"🔁 Recursing with followup:\n{followup}")
-                    return await self.ask(followup)
-
-            return reply
-
         except Exception as e:
-            logger.exception(f"LLM error: {e}")
+            if _is_recoverable(e) and _retries > 0:
+                logger.warning(
+                    f"LLM call failed ({e.__class__.__name__}: {e}). "
+                    f"Retrying in {_retry_delay:.1f}s…"
+                )
+                await asyncio.sleep(_retry_delay)
+                return await self.ask(
+                    prompt,
+                    _depth=_depth,
+                    _max_depth=_max_depth,
+                    _retries=_retries - 1,
+                    _retry_delay=_retry_delay * 2,
+                )
+            logger.exception(f"Unrecoverable LLM error: {e}")
             return f"[LLM error: {e}]"
+
+        # ── 2. Normal success path ──────────────────────────────────────
+        reply = response.choices[0].message.content.strip()
+        logger.info("Prompt and context sent to LLM.")
+
+        context.append_chat("user", prompt)
+        context.append_chat("assistant", reply)
+        context.save()
+
+        task_ids = tool_registry.process_llm_response_with_tools(reply, dispatch=True)
+        if not task_ids:
+            return reply  # final answer — no tools requested
+
+        # ── 3. Await tool tasks concurrently ────────────────────────────
+        results = await asyncio.gather(
+            *(task_manager.wait_for_result(tid) for tid in task_ids),
+            return_exceptions=True,
+        )
+        outputs = [
+            r.output
+            for r in results
+            if hasattr(r, "output") and r.output not in (None, "")
+        ]
+        logger.debug(
+            f"Completed {len(task_ids)} tool task(s); "
+            f"{len(outputs)} produced non‑empty output."
+        )
+
+        if not outputs:
+            return reply  # tools produced nothing useful
+
+        # ── 4. Recurse once with tool outputs ───────────────────────────
+        followup = "\n\n".join(map(str, outputs))
+        return await self.ask(
+            followup,
+            _depth + 1,
+            _max_depth,
+            _retries,  # propagate remaining retries
+            _retry_delay,
+        )

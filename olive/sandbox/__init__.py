@@ -356,31 +356,17 @@ class SandboxManager:
                 "dispatched": True,
                 "task_id": spec.id,
                 "return_id": spec.return_id,
-                "result_path": str(env.get_result_file(result_filename))
+                "result_path": str(env.get_result_file(result_filename)),
             }
 
         result_path = env.get_result_file(result_filename)
         logger.info("Waiting for result via watchdog: %s", result_path)
 
-        class _Done(FileSystemEventHandler):
-            def __init__(self) -> None:
-                self.evt = asyncio.Event()
+        from olive.tasks.watcher import wait_file  # sync helper
 
-            def on_created(self, event):  # type: ignore[override]
-                if Path(event.src_path) == result_path:
-                    self.evt.set()
-
-        h = _Done()
-        ob = Observer()
-        ob.schedule(h, result_dir, recursive=False)
-        ob.start()
-        try:
-            while not result_path.exists():
-                if h.evt.wait(1):
-                    break
-        finally:
-            ob.stop()
-            ob.join()
+        appeared = wait_file(result_path, timeout=None)
+        if not appeared:
+            raise TimeoutError(f"Task {spec.id}: result file never appeared")
 
         logger.info("✅ Result ready: %s", result_path)
         return json.loads(result_path.read_text())
