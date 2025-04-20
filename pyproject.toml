@@ -1,8 +1,11 @@
 [project]
 name = "olive"
 version = "0.1.0"
-description = "Olive CLI"
+description = "Olive CLI & HTTP"
 
+# ---------------------------------------------------------------------------
+# Core runtime deps – keep base install lean but functional
+# ---------------------------------------------------------------------------
 dependencies = [
     # --- CLI / UI ---
     "typer>=0.9",
@@ -12,7 +15,7 @@ dependencies = [
     # --- Core ---
     "pydantic>=2.6,<3",
     "anyio>=4",
-    
+
     # --- LLM / tokenisation ---
     "openai>=1,<2",
     "tiktoken>=0.6",
@@ -26,14 +29,29 @@ dependencies = [
 
 requires-python = ">=3.11"
 
+# ---------------------------------------------------------------------------
+# Optional extras
+# ---------------------------------------------------------------------------
 [project.optional-dependencies]
+http = [
+    # HTTP/ASGI stack
+    "fastapi>=0.110,<1",
+    "uvicorn[standard]>=0.29,<1",
+]
+
 dev = [
     "pytest>=8.2",
     "pytest-cov>=4",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
 ]
 
+# ---------------------------------------------------------------------------
+# Entrypoints
+# ---------------------------------------------------------------------------
 [project.scripts]
 olive = "olive.cli:app"
+# `olive.http.bootstrap` can be run via `python -m` or uvicorn; no extra console script yet.
 
 [tool.setuptools.packages.find]
 include = ["olive*"]

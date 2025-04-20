@@ -2,15 +2,14 @@
 
 import subprocess
 
-from olive.logger import get_logger
-from olive.daemon import process_manager
-from olive.ui import print_error, print_info
-from olive.shell.dispatchers import dispatch
-from olive.init import initialize_shell_session
-from olive.prompt_ui import olive_prompt, session
-
 # ensure all admin commands get registered
 import olive.shell.admin  # noqa: F401
+from olive.daemon import process_manager
+from olive.init import initialize_shell_session
+from olive.logger import get_logger
+from olive.prompt_ui import olive_prompt, session
+from olive.shell.dispatchers import dispatch
+from olive.ui import print_error, print_info
 
 logger = get_logger("shell")
 
@@ -47,7 +46,7 @@ async def run_shell_command(command: str):
     or run locally otherwise.
     """
     daemons = process_manager.list()
-    alive = [d for d in daemons.values() if d.type == "shell" and d.is_alive()]
+    alive = [d for d in daemons.values() if d.kind == "shell" and d.is_alive()]
 
     if len(alive) == 1:
         daemon = alive[0]

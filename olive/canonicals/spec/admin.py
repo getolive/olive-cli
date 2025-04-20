@@ -2,10 +2,11 @@
 import json
 import shlex
 from datetime import datetime
-from olive.tools import tool_registry
-from olive.prompt_ui import session, olive_management_command
+
 from rich import print
 
+from olive.prompt_ui import olive_management_command, session
+from olive.tools import tool_registry
 
 USAGE = "[yellow]Usage: :spec [list|create|complete|cancel] ...[/yellow]"
 

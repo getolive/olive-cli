@@ -1,8 +1,10 @@
 # cli/olive/canonicals/admin.py
-from olive.prompt_ui import olive_management_command
-from olive.canonicals import canonicals_registry
-from rich.table import Table
 from rich import print
+from rich.table import Table
+
+from olive.canonicals import canonicals_registry
+from olive.prompt_ui import olive_management_command
+
 
 @olive_management_command(":canonicals")
 def canonicals_summary_command():

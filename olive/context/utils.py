@@ -1,16 +1,19 @@
 # cli/olive/context/utils.py
 
-import subprocess
 import ast
+import subprocess
 from pathlib import Path
 from typing import List
-from olive.preferences.admin import get_prefs_lazy
-from .models import ASTEntry
-from olive.logger import get_logger
+
 from olive.context.injection import olive_context_injector
 from olive.env import get_project_root
+from olive.logger import get_logger
+from olive.preferences.admin import get_prefs_lazy
+
+from .models import ASTEntry
 
 logger = get_logger(__name__)
+
 
 @olive_context_injector(role="user")
 def render_file_context_for_llm() -> List[str]:
@@ -21,6 +24,7 @@ def render_file_context_for_llm() -> List[str]:
     - Otherwise, inject full file contents (respecting line limits).
     """
     from olive.context import context  # lazy import
+
     prefs = get_prefs_lazy()
 
     messages = []
@@ -30,17 +34,20 @@ def render_file_context_for_llm() -> List[str]:
             if not entries:
                 continue
             summary = "\n".join(
-                f"{entry.type} {entry.name} ({entry.location})"
-                for entry in entries
+                f"{entry.type} {entry.name} ({entry.location})" for entry in entries
             )
             messages.append(f"# metadata: {path} ({len(entries)} items)\n{summary}")
 
-        logger.info(f"[context] Injected metadata for {len(context.state.metadata)} files.")
+        logger.info(
+            f"[context] Injected metadata for {len(context.state.metadata)} files."
+        )
     else:
         for f in context.state.files:
             content = "\n".join(f.lines)
             messages.append(f"# file: {f.path} ({len(f.lines)} lines)\n{content}")
-        logger.info(f"[context] Injected raw file content for {len(context.state.files)} files.")
+        logger.info(
+            f"[context] Injected raw file content for {len(context.state.files)} files."
+        )
 
     return messages
 
@@ -89,9 +96,11 @@ def extract_ast_info(filepath: str) -> dict:
             entries.append(
                 ASTEntry(
                     name=node.name,
-                    type="async_function"
-                    if isinstance(node, ast.AsyncFunctionDef)
-                    else "function",
+                    type=(
+                        "async_function"
+                        if isinstance(node, ast.AsyncFunctionDef)
+                        else "function"
+                    ),
                     location=location,
                     summary=summary,
                     code=code,

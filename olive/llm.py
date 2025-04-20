@@ -7,18 +7,18 @@ Handles prompt preparation, tool metadata injection, abstract mode summarization
 streamlined file context, and interaction with OpenAI-compatible LLM providers.
 """
 
-import yaml
-import tiktoken
 from pathlib import Path
 from typing import List
+
+import tiktoken
+import yaml
 from openai import OpenAI
 
 from olive.context import context
-from olive.preferences import prefs
 from olive.logger import get_logger
+from olive.preferences import prefs
 from olive.tasks import task_manager
 from olive.tools import tool_registry
-
 
 logger = get_logger("llm")
 

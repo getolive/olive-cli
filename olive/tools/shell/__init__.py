@@ -4,10 +4,10 @@ import subprocess
 
 from olive.logger import get_logger
 from olive.tools import ToolDescription
-from olive.tools.toolkit import ToolResponse, validate_invocation, require_command
 from olive.tools.permissions import is_command_allowed
-from .guard import build_safe_env
+from olive.tools.toolkit import ToolResponse, require_command, validate_invocation
 
+from .guard import build_safe_env
 
 TOOL_NAME = "shell"  # Single source of truth
 logger = get_logger(f"tools.{TOOL_NAME}")

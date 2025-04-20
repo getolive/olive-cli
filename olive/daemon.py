@@ -1,32 +1,36 @@
 # cli/olive/daemon.py
 import json
+import os
 import shlex
-
 import subprocess
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
+
+from olive.env import get_project_root
 from olive.logger import get_logger
-from olive.env import get_olive_root
 
 logger = get_logger("daemon")
 
-OLIVE_RUN_DIR = (
-    (get_olive_root() / "run") if get_olive_root() else Path.home() / ".olive" / "run"
-)
+_proj = get_project_root() or Path.cwd()
+OLIVE_RUN_DIR = (_proj / ".olive" / "run").resolve()
 OLIVE_LOGS_DIR = OLIVE_RUN_DIR.parent / "logs"
-DAEMON_LOG = OLIVE_LOGS_DIR / "daemon.log"
+DAEMON_LOG = OLIVE_LOGS_DIR / (os.getenv("OLIVE_SESSION_ID", "default") + "/daemon.log")
 
 
 class ProcessInfo:
-    def __init__(self, daemon_id: str, pid: int, type: str):
+    def __init__(self, *, daemon_id: str, pid: int, kind: str):
         self.daemon_id = daemon_id
         self.pid = pid
-        self.type = type
+        self.kind = kind
         self.path = OLIVE_RUN_DIR / f"{daemon_id}.json"
 
     def save(self):
         OLIVE_RUN_DIR.mkdir(parents=True, exist_ok=True)
-        data = {"daemon_id": self.daemon_id, "pid": self.pid, "type": self.type}
+        data = {
+            "daemon_id": self.daemon_id,
+            "pid": self.pid,
+            "kind": self.kind,
+        }
         with open(self.path, "w") as f:
             json.dump(data, f)
         logger.debug(f"Saved process info: {data} -> {self.path}")
@@ -44,7 +48,7 @@ class ProcessInfo:
             return cls(
                 daemon_id=data["daemon_id"],
                 pid=data["pid"],
-                type=data.get("type", "unknown"),
+                kind=data.get("kind"),
             )
         except Exception as e:
             logger.error(f"Failed to load process metadata for {daemon_id}: {e}")
@@ -62,7 +66,7 @@ class ProcessInfo:
                     proc = cls(
                         daemon_id=data["daemon_id"],
                         pid=data["pid"],
-                        type=data.get("type", "unknown"),
+                        kind=data.get("kind", "unknown"),
                     )
                     entries[proc.daemon_id] = proc
             except Exception as e:
@@ -115,7 +119,7 @@ class ProcessManager:
         proc.save()
 
     def spawn(
-        self, daemon_id: str, cmd: List[str], type: str = "shell"
+        self, daemon_id: str, cmd: List[str], kind: str = "shell"
     ) -> Optional[ProcessInfo]:
         session_name = daemon_id.replace("_", "-")
         command_str = shlex.join(cmd)
@@ -130,7 +134,7 @@ class ProcessManager:
 
             # We can't get the child PID directly from tmux, so we use a dummy
             dummy_pid = -1
-            proc = ProcessInfo(daemon_id=daemon_id, pid=dummy_pid, type=type)
+            proc = ProcessInfo(daemon_id=daemon_id, pid=dummy_pid, kind=kind)
             self.save(proc)
             return proc
         except subprocess.CalledProcessError as e:

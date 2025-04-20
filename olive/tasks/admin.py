@@ -1,9 +1,11 @@
 # cli/olive/tasks/admin.py
 import json
-from pathlib import Path
 from datetime import datetime
-from rich.table import Table
+from pathlib import Path
+
 from rich.markdown import Markdown
+from rich.table import Table
+
 from olive.prompt_ui import olive_management_command
 from olive.ui import console, print_error, print_warning
 
@@ -52,11 +54,11 @@ def tasks_list_command(arg: str = None):
         color = (
             "green"
             if status == "running"
-            else "red"
-            if status == "failed"
-            else "yellow"
-            if status == "pending"
-            else "dim"
+            else (
+                "red"
+                if status == "failed"
+                else "yellow" if status == "pending" else "dim"
+            )
         )
         start_human = (
             datetime.fromisoformat(start).strftime("%Y-%m-%d %H:%M:%S") if start else ""

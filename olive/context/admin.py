@@ -4,16 +4,16 @@ import tempfile
 from pathlib import Path
 
 from rich import print
-from rich.tree import Tree
 from rich.console import Console
+from rich.tree import Tree
 
+from olive.canonicals.spec.models import FeatureSpec
 from olive.context import context
-from olive.prompt_ui import olive_management_command
 from olive.llm import LLMProvider
 from olive.logger import get_logger
 from olive.preferences import prefs
+from olive.prompt_ui import olive_management_command
 from olive.tools.spec.state import get_active_spec_id
-from olive.canonicals.spec.models import FeatureSpec
 
 logger = get_logger("context-admin")
 console = Console()

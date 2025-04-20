@@ -18,12 +18,12 @@ from typing import Any, Callable, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
-from olive.env import get_olive_base_path
+from olive import env
 from olive.logger import get_logger
 
 logger = get_logger(__name__)
 
-_TASKS_ROOT = get_olive_base_path() / "run" / "tasks"
+_TASKS_ROOT = env.get_dot_olive() / "run" / "tasks"
 _TASKS_ROOT.mkdir(parents=True, exist_ok=True)
 
 

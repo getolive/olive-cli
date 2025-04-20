@@ -1,11 +1,14 @@
 # cli/olive/sandbox/admin.py
 import subprocess
+
 from rich.console import Console
 from rich.markdown import Markdown
-from olive.sandbox import sandbox
-from olive.prompt_ui import olive_management_command
+
 from olive.logger import get_logger
-from .env import docker_required
+from olive.prompt_ui import olive_management_command
+from olive.sandbox import sandbox
+
+from .utils import docker_required
 
 console = Console()
 logger = get_logger(__name__)
@@ -51,6 +54,7 @@ def sandbox_start_command(*args, **kwargs):
             f"[bold red]❌ Failed to start sandbox: {e}[/bold red]\n"
             "[dim]Check logs or try `--force` to rebuild from scratch.[/dim]"
         )
+
 
 @olive_management_command(":sandbox-stop")
 @docker_required
@@ -99,7 +103,9 @@ def sandbox_attach_command():
 
     container = sandbox.container_name
     console.print(f"[cyan]Attaching to sandbox container:[/cyan] {container}")
-    console.print("🛡️  [yellow]Reminder:[/yellow] Press [cyan]Ctrl+B, then D[/cyan] to detach. [dim]Exiting will stop the container.[/dim]")
+    console.print(
+        "🛡️  [yellow]Reminder:[/yellow] Press [cyan]Ctrl+B, then D[/cyan] to detach. [dim]Exiting will stop the container.[/dim]"
+    )
     try:
         subprocess.run(
             ["docker", "exec", "-it", container, "tmux", "attach"], check=True

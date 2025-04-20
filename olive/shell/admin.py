@@ -1,31 +1,32 @@
 # olive/shell/admin.py
 
-import sys
-import time
 import json
 import subprocess
+import sys
 import tempfile
+import time
 from shutil import which
 
+from rich.table import Table
+
+from olive.context import context
+from olive import env
+from olive.llm import LLMProvider
+from olive.logger import get_logger, get_current_log_file
 from olive.prompt_ui import (
-    olive_management_command,
-    session,
     get_management_commands,
+    olive_management_command,
     olive_prompt,
+    session,
 )
-from olive.logger import get_logger, get_session_log_path
 from olive.ui import (
     console,
+    print_highlight,
+    print_info,
     print_secondary,
     print_success,
-    print_info,
     print_warning,
-    print_highlight,
 )
-from olive.context import context
-from olive.llm import LLMProvider
-from olive.env import get_project_root
-from rich.table import Table
 
 logger = get_logger(__name__)
 llm = LLMProvider()
@@ -34,7 +35,7 @@ llm = LLMProvider()
 @olive_management_command(":root")
 def print_project_root():
     """Print the Olive project root directory."""
-    root = get_project_root()
+    root = env.get_project_root()
     print_secondary(f"olive project root: {root}")
 
 
@@ -57,7 +58,7 @@ def help_command():
 @olive_management_command(":logs")
 def logs_command():
     """Open or display the current session log."""
-    log_path = get_session_log_path()
+    log_path = get_current_log_file()
     pager = "less" if which("less") else ("more" if which("more") else None)
 
     if pager:

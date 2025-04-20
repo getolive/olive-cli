@@ -1,6 +1,7 @@
 # cli/olive/context/injection.py
 from functools import wraps
-from typing import Callable, List, Union, Literal, Dict
+from typing import Callable, Dict, List, Literal, Union
+
 from olive.logger import get_logger
 
 logger = get_logger(__name__)

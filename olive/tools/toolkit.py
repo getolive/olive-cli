@@ -1,5 +1,6 @@
 # olive/tools/toolkit.py
-from typing import Optional, Callable
+from typing import Callable, Optional
+
 from pydantic import BaseModel
 
 
@@ -15,10 +16,12 @@ def olive_tool_management_command(name: Optional[str] = None):
     Returns:
         Callable: Decorated function with `_olive_is_shell_command` and `_olive_command_name`
     """
+
     def decorator(fn: Callable):
         fn._olive_is_shell_command = True
         fn._olive_command_name = name or f":{fn.__name__.replace('_command', '')}"
         return fn
+
     return decorator
 
 

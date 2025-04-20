@@ -9,13 +9,15 @@ This version de-couples spec tracking from Git, and supports direct
 state management via `.olive/specs/` and `.olive/state/active_spec.yml`.
 """
 
-import yaml
 from pathlib import Path
-from olive.logger import get_logger
-from olive.tools.toolkit import ToolResponse, validate_invocation, require_command
+
+import yaml
+
 from olive.canonicals.spec.models import FeatureSpec
 from olive.canonicals.spec.storage import get_all_specs
+from olive.logger import get_logger
 from olive.tools.spec.state import get_active_spec_id, set_active_spec_id
+from olive.tools.toolkit import ToolResponse, require_command, validate_invocation
 
 # Ensure system prompt injectors are registered
 from . import utils as _injectors  # noqa: F401

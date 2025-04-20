@@ -9,21 +9,21 @@ prompt_ui.py manages the host shell interactions with Olive including
  - wiring/handling of bindings like enter or escape
 """
 
-import glob
-import shutil
-import inspect
 import functools
+import glob
+import inspect
+import shutil
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
 
+from olive.logger import get_logger
 from olive.preferences import prefs
 from olive.ui import OLIVE_THEME, print_error
-from olive.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -47,6 +47,7 @@ def get_management_commands() -> dict[str, callable]:
 
 def register_commands(cmds: dict[str, callable]):
     _command_lookup.update(cmds)
+
 
 def safe_command(fn):
     """
@@ -82,6 +83,7 @@ def olive_management_command(name: str):
     Register a shell‑management command under `name`, and
     automatically wrap it in @safe_command for consistent error handling.
     """
+
     def decorator(fn):
         wrapped = safe_command(fn)
         wrapped._olive_is_shell_command = True

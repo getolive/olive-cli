@@ -38,11 +38,33 @@ set -e
 
 if [ "$1" = "daemon" ]; then
   echo "[sandbox] Starting in daemon mode"
+
+  # ── derive a session id ──────────────────────────────────────────
+  if [ -z "$OLIVE_SESSION_ID" ]; then
+    if command -v uuidgen >/dev/null 2>&1; then
+      export OLIVE_SESSION_ID=$(uuidgen | cut -c1-8)
+    else
+      export OLIVE_SESSION_ID=$(cat /proc/sys/kernel/random/uuid | cut -c1-8)
+    fi
+  fi
+
+  # ── per‑daemon sandbox dirs live under home (always writable) ────
+  export OLIVE_SANDBOX_DIR="$HOME/.olive/run/sbx/$OLIVE_SESSION_ID"
+  mkdir -p "$OLIVE_SANDBOX_DIR/rpc" "$OLIVE_SANDBOX_DIR/result/logs"
+
+  echo "[sandbox] SID=$OLIVE_SESSION_ID  dir=$OLIVE_SANDBOX_DIR"
+
   . /olive/.venv/bin/activate
   cd /mnt/project
   olive init
-  echo "[sandbox] Launching Olive shell inside tmux (PID 1)"
-  exec tmux new-session -s default "olive shell"
+
+  # tmux session name mirrors the SID
+  # we need to avoid tripping olive up that this directory isn't a git repo. 
+  # or we just need to make it always one if it isn't already. TODO#
+  exec tmux new-session  -c /mnt/project  -s "olive-$OLIVE_SESSION_ID" \
+    "env OLIVE_SESSION_ID=$OLIVE_SESSION_ID \
+    OLIVE_SANDBOX_DIR=$OLIVE_SANDBOX_DIR \
+    olive shell"
 
 elif [ "$1" = "debug" ]; then
   echo "[sandbox] Starting in DEBUG mode — dropping to bash shell"

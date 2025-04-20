@@ -1,8 +1,10 @@
 # cli/olive/canonicals/utils.py
 
 from pathlib import Path
-import yaml
 from typing import Any
+
+import yaml
+
 from olive.logger import get_logger
 
 logger = get_logger("canonicals.utils")

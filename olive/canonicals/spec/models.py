@@ -1,15 +1,19 @@
 # cli/olive/canonicals/spec/models.py
-import yaml
 import subprocess
 from datetime import datetime
-from pathlib import Path 
-from typing import List, Optional, Literal
+from pathlib import Path
+from typing import List, Literal, Optional
+
+import yaml
 from pydantic import BaseModel
+
 from olive.canonicals.utils import SafeYAMLSaveMixin
+
 
 class FeatureSpec(BaseModel, SafeYAMLSaveMixin):
     """A FeatureSpec is a summarized unit of work that we want to get done.
-It can be big like an epic or small like a task (or anything in between)."""
+    It can be big like an epic or small like a task (or anything in between)."""
+
     id: str
     title: str
     description: str
@@ -43,7 +47,7 @@ It can be big like an epic or small like a task (or anything in between)."""
     def save(self):
         Path(".olive/specs").mkdir(parents=True, exist_ok=True)
         self.safe_save_yaml(Path(self.filename()), self.model_dump(exclude_none=True))
-        
+
     def mark_complete(self, commit: bool = True, message: Optional[str] = None):
         self.status = "complete"
         self.save()
@@ -62,11 +66,16 @@ It can be big like an epic or small like a task (or anything in between)."""
         subprocess.run(["git", "commit", "-m", message], check=True)
 
         # 🧠 Check for other uncommitted changes
-        result = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        result = subprocess.run(
+            ["git", "status", "--porcelain"], capture_output=True, text=True
+        )
         if result.stdout.strip():
-            print("[yellow]⚠️ You have other uncommitted changes in this branch.[/yellow]")
-            print("[dim]Run `git add`, `git commit`, and `git merge` when you're ready to fully resolve this spec.[/dim]")
-
+            print(
+                "[yellow]⚠️ You have other uncommitted changes in this branch.[/yellow]"
+            )
+            print(
+                "[dim]Run `git add`, `git commit`, and `git merge` when you're ready to fully resolve this spec.[/dim]"
+            )
 
     @classmethod
     def create(cls, title: str, description: str) -> "FeatureSpec":
@@ -82,10 +91,10 @@ It can be big like an epic or small like a task (or anything in between)."""
             acceptance_criteria=[
                 "Code is committed",
                 "Tests pass",
-                "Feature is callable via shell"
+                "Feature is callable via shell",
             ],
             created_at=now,
-            branch=branch
+            branch=branch,
         )
         spec.save()
         subprocess.run(["git", "checkout", "-b", branch], check=True)

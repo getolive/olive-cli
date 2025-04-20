@@ -7,11 +7,14 @@ Management commands for the src tool (e.g., :diff).
 import shlex
 import subprocess
 from shutil import which
+
 from rich import print
+
 from olive.logger import get_logger  # fixed import
 from olive.prompt_ui import olive_management_command
 
 logger = get_logger("tools.src.admin")  # more specific name
+
 
 @olive_management_command(":diff")
 def diff_command(args: str = None):
