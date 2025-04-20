@@ -91,7 +91,6 @@ def test_background_print_without_lock_raises():
 
     asyncio.run(_run())
 
-    
 
 # --------------------------------------------------------------------------- #
 # Scenario 2 – call WITH the lock should work
@@ -111,4 +110,3 @@ def test_background_print_with_lock_passes():
         await task_manager.wait_for_result(tid, timeout=5)
 
     asyncio.run(_run())
-

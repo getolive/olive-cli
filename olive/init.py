@@ -3,24 +3,20 @@ import json
 import subprocess
 from pathlib import Path
 
-from rich import print
-from rich.console import Console
-
-from olive.logger import get_logger
-from olive.env import get_olive_base_path, set_project_root, is_git_dirty
-from olive.preferences.admin import get_prefs_lazy, prefs_show_summary
-from olive.canonicals import canonicals_registry
-from olive.tools import tool_registry
-from olive.tools.admin import tools_summary_command
-import olive.sandbox.admin  # Register CLI commands # type: ignore
-import olive.tasks.admin  # Register CLI commands # type: ignore
 import olive.canonicals.admin  # Register CLI commands # type: ignore
 import olive.context.admin  # Register CLI commands # type: ignore
-
+import olive.sandbox.admin  # Register CLI commands # type: ignore
+import olive.tasks.admin  # Register CLI commands # type: ignore
+from olive.canonicals import canonicals_registry
 from olive.context import context
+from olive import env
+from olive.logger import get_logger
+from olive.preferences.admin import get_prefs_lazy, prefs_show_summary
+from olive.tools import tool_registry
+from olive.tools.admin import tools_summary_command
+from olive.ui import console, print_info, print_error, print_success, print_warning
 
 logger = get_logger(__name__)
-console = Console()
 
 
 def load_system_prompt(prefs) -> str:
@@ -54,21 +50,21 @@ def validate_git_repo():
         logger.info("Git repository detected")
         return True
     except subprocess.CalledProcessError:
-        print("[red]❌ Olive requires a Git repository.[/red]")
-        print("Please run `git init` and try again.")
+        print_error("Olive requires a Git repository.")
+        print_info("Please run `git init` and try again.")
         logger.error("Git repository not found.")
         return False
 
 
 def ensure_directories():
-    base = get_olive_base_path()
+    base = env.get_dot_olive()
     for sub in ["logs", "context", "canonicals", "providers", "state"]:
         (base / sub).mkdir(parents=True, exist_ok=True)
     logger.info("Required directories ensured")
 
 
 def ensure_context_initialized(prefs):
-    context_path = get_olive_base_path() / "context" / "active.json"
+    context_path = env.get_dot_olive() / "context" / "active.json"
     if not context_path.exists():
         context = {
             "system_prompt": load_system_prompt(prefs),
@@ -98,32 +94,29 @@ def discover_components():
 
 def start_sandbox_if_enabled(prefs):
     if prefs.is_sandbox_enabled():
-        with console.status(
-            "[bold green]Starting sandbox...[/bold green]", 
-            spinner="dots"
-        ):
-            try:
-                olive.sandbox.admin.sandbox_start_command()
-                logger.info("Sandbox started")
-            except Exception as e:
-                logger.error(f"Failed to start sandbox: {e}")
-                print("[red]❌ Failed to start sandbox — exiting shell.[/red]")
-                raise SystemExit(1)
+        try:
+            olive.sandbox.admin.sandbox_start_command()
+            logger.info("Sandbox started")
+        except Exception as e:
+            logger.error(f"Failed to start sandbox: {e}")
+            print_error("Failed to start sandbox — exiting shell.")
+            raise SystemExit(1)
 
 
 def initialize_shell_session():
     from uuid import uuid4
+
     import olive.env
 
     olive.env.session_id = str(uuid4())[:8]
-    print(
+    console.print(
         f"[bold green]🌱 Welcome to Olive Shell[/bold green] [dim](session: {olive.env.session_id})[/dim]\n"
     )
 
     prefs_show_summary()
 
-    if is_git_dirty():
-        print("[yellow]⚠️ Git repo is dirty — uncommitted changes detected[/yellow]\n")
+    if env.is_git_dirty():
+        print_warning("Git repo is dirty — uncommitted changes detected\n")
 
     prefs = get_prefs_lazy()
     start_sandbox_if_enabled(prefs)
@@ -132,15 +125,15 @@ def initialize_shell_session():
 def initialize_olive():
     project_root_path = Path.cwd().resolve()
     logger.info(f"Starting Olive initialization @ {project_root_path}")
-    set_project_root(project_root_path)
+    env.set_project_root(project_root_path)
 
     if not validate_git_repo():
         return
 
     prefs = get_prefs_lazy()
     if not prefs.initialized:
-        print("[red]❌ Olive requires a preferences.yml to function.[/red]")
-        print("Please create ~/.olive/preferences.yml and retry.")
+        print_error("Olive requires a preferences.yml to function.")
+        print_info("Please create ~/.olive/preferences.yml and retry.")
         logger.error("Preferences not initialized.")
         return
 
@@ -148,7 +141,7 @@ def initialize_olive():
     context.hydrate()
     discover_components()
 
-    print("✅ Initialized Olive in .olive/")
+    print_success("Initialized Olive in .olive/")
     logger.info("Initialization complete.")
 
 
@@ -156,9 +149,9 @@ def validate_olive():
     """Validates user/project Olive configuration and context."""
     try:
         initialize_olive()
-        print("✅ Olive has been initialized\n")
+        print_success("Olive has been initialized\n")
     except Exception as e:
-        print(f"[red]❌ Olive failed to initialize.[/red] [dim]{str(e)}[/dim]")
+        print_error(f"Olive failed to initialize. [dim]{str(e)}[/dim]")
         logger.exception("Initialization failed")
         return
 
@@ -166,54 +159,58 @@ def validate_olive():
     project_path = Path(".olive")
     gitignore_path = Path(".gitignore")
 
-    print("\n📂 [bold underline]User Olive Directory (~/.olive):[/bold underline]")
-    print(
+    print_info("\n📂 [bold underline]User Olive Directory (~/.olive):[/bold underline]")
+    console.print(
         f"✅ Found {user_path}"
         if user_path.exists()
         else "❌ Missing ~/.olive directory"
     )
 
-    print("\n📁 [bold underline]Project Olive Directory (.olive):[/bold underline]")
+    print_info(
+        "\n📁 [bold underline]Project Olive Directory (.olive):[/bold underline]"
+    )
     if project_path.exists():
-        print(f"✅ Found {project_path}")
+        print_success(f"✅ Found {project_path}")
 
         logs = project_path / "logs"
         if logs.exists():
             size_kb = (
                 sum(f.stat().st_size for f in logs.glob("*") if f.is_file()) / 1024
             )
-            print(f"✅ Logs present — {size_kb:.1f} KB")
+            print_success(f"Logs present — {size_kb:.1f} KB")
         else:
-            print("⚠️ Missing logs directory")
+            print_error("⚠️ Missing logs directory")
 
         context = project_path / "context" / "active.json"
-        print("✅ Context loaded" if context.exists() else "⚠️ Missing active.json")
+        console.print(
+            "✅ Context loaded" if context.exists() else "⚠️ Missing active.json"
+        )
 
-        print("\n🔍 Canonicals:")
+        print_info("\n🔍 Canonicals:")
         canonicals = sorted(canonicals_registry.list())
         if canonicals:
             for name in canonicals:
-                print(f"✅ {name}")
+                print_success(f"{name}")
         else:
-            print("⚠️ No canonicals found")
+            print_warning("⚠️ No canonicals found")
 
-        print("\n🛠️ Tools:")
+        print_info("\n🛠️ Tools:")
         tools_summary_command()
     else:
-        print("❌ Missing .olive directory")
+        print_error("Missing .olive directory")
 
-    print("\n📄 [bold underline].gitignore Checks:[/bold underline]")
+    print_info("\n📄 [bold underline].gitignore Checks:[/bold underline]")
     if gitignore_path.exists():
         lines = gitignore_path.read_text().splitlines()
         ignored = any(".olive/" in line or ".olive/*" in line for line in lines)
         override = any("!.olive/specs/" in line for line in lines)
-        print(
+        console.print(
             "✅ `.olive/` is ignored" if ignored else "❌ Missing `.olive/` ignore line"
         )
-        print(
+        console.print(
             "✅ `.olive/specs/` is tracked"
             if override
             else "❌ Missing `!.olive/specs/` override"
         )
     else:
-        print("⚠️ No .gitignore file found")
+        print_error("⚠️ No .gitignore file found")

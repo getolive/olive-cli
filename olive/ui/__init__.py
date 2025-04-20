@@ -1,6 +1,7 @@
 # olive/ui/__init__.py
 import threading
 from contextlib import contextmanager, nullcontext
+
 from rich.console import Console
 from rich.theme import Theme
 
@@ -29,6 +30,7 @@ OLIVE_THEME = Theme(
 
 # Shared console instance using the olive theme
 console = Console(theme=OLIVE_THEME)
+
 
 # ------------------------------------------------------------------#
 # Thread‑safe helper for background updates

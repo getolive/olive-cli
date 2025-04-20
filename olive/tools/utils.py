@@ -2,11 +2,13 @@
 
 import re
 import xml.etree.ElementTree as ET
-from olive.context.injection import olive_context_injector
-from olive.logger import get_logger
 from typing import List, Tuple
 
+from olive.context.injection import olive_context_injector
+from olive.logger import get_logger
+
 logger = get_logger("tools.utils")
+
 
 @olive_context_injector(role="system")
 def render_tools_context_for_llm() -> List[str]:
@@ -21,6 +23,7 @@ def render_tools_context_for_llm() -> List[str]:
                     {'role': 'system', 'content': ...}
     """
     from olive.tools import tool_registry
+
     try:
         summary = tool_registry.build_llm_context_summary()
         logger.info("Injected tool usage summary into system prompt.")
@@ -28,6 +31,7 @@ def render_tools_context_for_llm() -> List[str]:
     except Exception as e:
         logger.exception(f"Failed to inject tool summary into system prompt: {e}")
         return []
+
 
 def extract_tool_calls(text: str) -> List[Tuple[str, str]]:
     """
@@ -46,10 +50,10 @@ def extract_tool_calls(text: str) -> List[Tuple[str, str]]:
     calls: List[Tuple[str, str]] = []
     for raw in blocks:
         try:
-            xml_fragment = f"<root>{raw}</root>"          # wrap so it's valid XML
+            xml_fragment = f"<root>{raw}</root>"  # wrap so it's valid XML
             root = ET.fromstring(xml_fragment)
             tool = root.findtext(".//tool").strip()
-            inp  = root.findtext(".//input")
+            inp = root.findtext(".//input")
             if tool and inp is not None:
                 calls.append((tool, inp.strip()))
         except ET.ParseError:

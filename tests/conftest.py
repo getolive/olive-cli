@@ -5,7 +5,9 @@ Stops the background TaskManager runner so pytest terminates cleanly.
 """
 
 from __future__ import annotations
+
 import pytest
+
 from olive.tasks import task_manager
 
 

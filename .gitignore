@@ -13,3 +13,6 @@
 .venv
 cli/olive.egg-info/*
 zipper.sh
+docs/
+scripts/
+olive/http/

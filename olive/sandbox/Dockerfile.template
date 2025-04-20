@@ -1,4 +1,4 @@
-# olive/sandbox/Dockerfile
+# olive/sandbox/Dockerfile(.template)
 
 #
 # IMPORTANT BUILD NOTE:
@@ -51,7 +51,7 @@ RUN useradd -m -d /home/olive olive
 
 # Minimal runtime deps
 RUN apt-get update \
-    && apt-get install -y bash git curl tmux \
+    && apt-get install -y uuid-runtime bash git curl tmux \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy preinstalled Olive venv and code

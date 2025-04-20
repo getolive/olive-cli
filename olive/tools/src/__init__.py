@@ -1,14 +1,14 @@
 # cli/olive/tools/src/__init__.py
-from pathlib import Path
+import re
 import subprocess
 import tempfile
-import re
+from pathlib import Path
 
-from olive.logger import get_logger
 from olive.context import context as olive_context
-from olive.tools import ToolDescription
-from olive.tools.toolkit import ToolResponse, validate_invocation, require_command
 from olive.env import get_project_root
+from olive.logger import get_logger
+from olive.tools import ToolDescription
+from olive.tools.toolkit import ToolResponse, require_command, validate_invocation
 
 TOOL_NAME = "src"
 logger = get_logger(f"tools.{TOOL_NAME}")
@@ -102,7 +102,6 @@ def run_tool(input: dict, invoked_tool_name: str = TOOL_NAME) -> dict:
                     metadata={"suggestions": ["replace-lines", "patch"]},
                 ).dict()
 
-            
             resolved_path.parent.mkdir(parents=True, exist_ok=True)
             resolved_path.write_text(content, encoding="utf-8")
 
@@ -147,7 +146,7 @@ def run_tool(input: dict, invoked_tool_name: str = TOOL_NAME) -> dict:
                 original_lines += [""] * padding_needed
 
             new_content = original_lines[: start - 1] + new_lines + original_lines[end:]
-            
+
             resolved_path.write_text("\n".join(new_content) + "\n", encoding="utf-8")
             return ToolResponse(
                 success=True, stdout=f"Replaced lines {start}–{end} in {path_str}"

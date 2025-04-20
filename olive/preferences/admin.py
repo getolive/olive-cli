@@ -1,12 +1,14 @@
 # cli/olive/preferences/admin.py
-from olive.prompt_ui import olive_management_command
-from olive.logger import get_logger
+import subprocess
+from shutil import which
+
 from rich import print
+from rich.console import Console
 from rich.panel import Panel
 from rich.tree import Tree
-from rich.console import Console
-from shutil import which
-import subprocess
+
+from olive.logger import get_logger
+from olive.prompt_ui import olive_management_command
 
 logger = get_logger(__name__)
 console = Console()

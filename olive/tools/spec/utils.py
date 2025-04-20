@@ -1,16 +1,18 @@
 # cli/olive/tools/spec/utils.py
-import yaml
-from olive.canonicals.spec.storage import get_all_specs
-from olive.canonicals.spec.models import FeatureSpec
-from olive.tools.spec.state import get_active_spec_id
-from olive.preferences import prefs
 from pathlib import Path
-from olive.logger import get_logger
 from typing import List
-from olive.context.injection import olive_context_injector
 
+import yaml
+
+from olive.canonicals.spec.models import FeatureSpec
+from olive.canonicals.spec.storage import get_all_specs
+from olive.context.injection import olive_context_injector
+from olive.logger import get_logger
+from olive.preferences import prefs
+from olive.tools.spec.state import get_active_spec_id
 
 logger = get_logger(__name__)
+
 
 @olive_context_injector(role="system")
 def render_spec_context_for_llm() -> List[str]:
@@ -98,13 +100,15 @@ def _summarize_specs_for_llm(specs: list[FeatureSpec], active_id: str | None) ->
         icon = (
             "🟢"
             if spec.id == active_id
-            else "🔵"
-            if spec.status == "open"
-            else "⚪"
-            if spec.status == "in-progress"
-            else "✅"
-            if spec.status == "complete"
-            else "❌"
+            else (
+                "🔵"
+                if spec.status == "open"
+                else (
+                    "⚪"
+                    if spec.status == "in-progress"
+                    else "✅" if spec.status == "complete" else "❌"
+                )
+            )
         )
 
         title_line = f"{icon} [{spec.id}] {spec.title}"

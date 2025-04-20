@@ -1,11 +1,13 @@
 import subprocess
 from pathlib import Path
+
 from olive.logger import get_logger
 
 _gitignore_cache = {}
 _gitignore_mtime = None
 
 logger = get_logger(__name__)
+
 
 def is_ignored_by_git(path: str) -> bool:
     global _gitignore_cache, _gitignore_mtime
@@ -23,9 +25,7 @@ def is_ignored_by_git(path: str) -> bool:
 
     try:
         result = subprocess.run(
-            ["git", "check-ignore", path],
-            capture_output=True,
-            text=True
+            ["git", "check-ignore", path], capture_output=True, text=True
         )
         ignored = result.returncode == 0
         _gitignore_cache[path] = ignored

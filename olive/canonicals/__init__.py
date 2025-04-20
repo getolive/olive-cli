@@ -3,9 +3,10 @@ import importlib
 import pkgutil
 from pathlib import Path
 from typing import Dict
-from .models import Canonical
 
 from olive.logger import get_logger
+
+from .models import Canonical
 
 logger = get_logger("canonicals")
 
@@ -51,9 +52,7 @@ class CanonicalRegistry:
                 logger.warning(f"{name}: {message}")
 
             self.available[name] = Canonical(
-                name=name,
-                installed=installed,
-                message=message
+                name=name, installed=installed, message=message
             )
 
     def list(self) -> Dict[str, Canonical]:

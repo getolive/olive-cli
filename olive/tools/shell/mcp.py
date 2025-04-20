@@ -4,6 +4,7 @@ from tools.shell import run_shell_tool
 
 app = FastAPI()
 
+
 @app.post("/tools/shell")
 async def mcp_shell(request: Request):
     body = await request.json()

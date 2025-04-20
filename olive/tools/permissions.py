@@ -1,7 +1,9 @@
 # olive/tools/permissions.py
 import shlex
 from typing import Tuple
+
 from olive.preferences import prefs
+
 
 def is_command_allowed(tool: str, command: str) -> Tuple[bool, str]:
     """
@@ -31,4 +33,3 @@ def is_command_allowed(tool: str, command: str) -> Tuple[bool, str]:
         return True, "Allowed in YOLO mode"
 
     return False, "Unknown tool mode"
-

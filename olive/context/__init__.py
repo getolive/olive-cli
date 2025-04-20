@@ -1,20 +1,18 @@
 # cli/olive/context/__init__.py
 
-import os
 import fnmatch
-from pathlib import Path
+import os
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Union
 
-from olive.context.models import Context, ChatMessage, ContextFile, ASTEntry
-from olive.logger import get_logger
-from olive.preferences import prefs
+from olive.context.models import ASTEntry, ChatMessage, Context, ContextFile
+from olive.context.utils import extract_ast_info, is_abstract_mode_enabled
 from olive.env import get_project_root
 from olive.gitignore import is_ignored_by_git
-from olive.context.utils import (
-    extract_ast_info,
-    is_abstract_mode_enabled,
-)
+from olive.logger import get_logger
+from olive.preferences import prefs
+
 from . import injection
 
 logger = get_logger("context")
@@ -46,7 +44,9 @@ class OliveContext:
             return  # already populated
 
         system_prompt_path = Path(
-            prefs.get("context", "system_prompt_path", default="~/.olive/my_system_prompt.txt")
+            prefs.get(
+                "context", "system_prompt_path", default="~/.olive/my_system_prompt.txt"
+            )
         ).expanduser()
 
         if system_prompt_path.exists():
@@ -54,15 +54,13 @@ class OliveContext:
             logger.info(f"Loaded system prompt from {system_prompt_path}")
         else:
             logger.warning("Using fallback system prompt.")
-            system_prompt = (
-                "You are Olive — a local-first, developer-facing, intelligent CLI agent..."
-            )
+            system_prompt = "You are Olive — a local-first, developer-facing, intelligent CLI agent..."
 
         if self.state.system:
             self.state.system[0] = system_prompt
         else:
             self.state.system = [system_prompt]
-    
+
     def save(self, max_chat: int = 20):
         self.state.chat = self.state.chat[-max_chat:]
         CONTEXT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -127,8 +125,6 @@ class OliveContext:
             f"{len(self.state.metadata)} metadata AST maps, "
             f"{len(self.state.imports)} import summaries"
         )
-
-            
 
     def _build_context_payload(self) -> list[ContextFile]:
         """

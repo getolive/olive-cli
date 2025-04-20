@@ -1,14 +1,22 @@
 # cli/olive/cli.py
-import typer
+import asyncio
+import json
+import os
+import signal
+import subprocess
 import sys
 import uuid
-import subprocess
-from olive.shell import run_interactive_shell, run_shell_command
-from olive.init import initialize_olive, validate_olive
-from olive.tools.admin import tools_summary_command
-from olive.tasks.runner import run_task_from_file
-from olive.daemon import process_manager
+from pathlib import Path
+
+import typer
+
+from olive import env
 from olive.context import context
+from olive.daemon import process_manager
+from olive.init import initialize_olive, validate_olive
+from olive.shell import run_interactive_shell, run_shell_command
+from olive.tasks.runner import run_task_from_file
+from olive.tools.admin import tools_summary_command
 
 app = typer.Typer(help="Olive: Local AI Dev Shell")
 
@@ -58,18 +66,60 @@ def shell(
         raise typer.Exit()
 
     if global_flags["daemon"]:
-        daemon_id = f"olive-shell-{uuid.uuid4().hex[:6]}"
-        process_info = process_manager.spawn(
-            daemon_id=daemon_id,
-            cmd=[sys.executable, "-m", "olive", "shell"],
-            type="shell",
+        # 1) re‑use existing alive shell
+        alive = next(
+            (
+                p
+                for p in process_manager.list().values()
+                if p.kind == "shell" and p.is_alive()
+            ),
+            None,
         )
-        if process_info:
-            typer.echo(
-                f"[daemon] Olive shell started in background with daemon ID {daemon_id}."
-            )
-        else:
-            typer.echo("Failed to start Olive shell in daemon mode.")
+        if alive:
+            sbx_dir = env.get_sandbox_root()
+            info = {
+                "id": alive.daemon_id,
+                "sbx_dir": str(sbx_dir),
+                "rpc_dir": str(sbx_dir / "rpc"),
+                "result_dir": str(sbx_dir / "result"),
+            }
+            typer.echo(json.dumps(info))
+            raise typer.Exit()
+
+        # 2) spawn fresh daemon
+        sid = uuid.uuid4().hex[:8]
+        sbx_dir = Path(".olive/run/sbx") / sid
+        (sbx_dir / "rpc").mkdir(parents=True, exist_ok=True)
+        (sbx_dir / "result" / "logs").mkdir(parents=True, exist_ok=True)
+
+        os.environ["OLIVE_SESSION_ID"] = sid
+        os.environ["OLIVE_SANDBOX_DIR"] = str(sbx_dir)
+
+        cmd = [
+            "env",
+            f"OLIVE_SESSION_ID={sid}",
+            f"OLIVE_SANDBOX_DIR={sbx_dir}",
+            sys.executable,
+            "-m",
+            "olive",
+            "shell",
+        ]
+
+        proc = process_manager.spawn(daemon_id=sid, cmd=cmd, kind="shell")
+
+        if not proc:
+            typer.echo("Failed to start daemon")
+            raise typer.Exit(1)
+
+        info = {
+            "id": sid,
+            "sbx_dir": str(sbx_dir),
+            "rpc_dir": str(sbx_dir / "rpc"),
+            "result_dir": str(sbx_dir / "result"),
+            "export": f"export OLIVE_SESSION_ID={sid} "
+            f"OLIVE_SANDBOX_DIR='{sbx_dir.resolve()}'",
+        }
+        typer.echo(json.dumps(info))
         raise typer.Exit()
     else:
         import asyncio
@@ -131,7 +181,7 @@ def print_daemon_list(include_dead: bool = False):
         if not include_dead and not alive:
             continue
         status = "alive" if alive else "dead"
-        typer.echo(f"[{daemon_id}] type={proc.type} pid={proc.pid} status={status}")
+        typer.echo(f"[{daemon_id}] kind={proc.kind} pid={proc.pid} status={status}")
 
 
 @app.command("ps")
@@ -154,23 +204,39 @@ def prune_command():
     typer.echo(f"Removed {removed} dead daemon(s).")
 
 
-@app.command("resume")
-def resume_command(daemon_id: str = typer.Argument(None)):
-    """Resume interaction with a background daemon."""
-    if not daemon_id:
+@app.command("attach")
+def attach_to_daemon_session(sid: str = typer.Argument(None)):
+    """Attach/Resume interaction with a background daemon."""
+    def no_match_exit():
         typer.echo(
             "Please specify a daemon ID. Run `olive ps` to view running daemons."
         )
-        raise typer.Exit()
+        raise typer.Exit(code=-1)
 
-    proc = process_manager.get(daemon_id)
+    entries = process_manager.list()
+    session_ids = [sid for sid, proc in entries.items()]
+
+    target_sid = None
+    if sid is None:
+        if len(session_ids) == 1:
+            target_sid = session_ids[0]
+        else:
+            no_match_exit()
+    else:
+        matching_sids = [s for s in session_ids if s.startswith(sid)]
+        if not matching_sids or len(matching_sids) > 1:
+            no_match_exit()
+        else:
+            target_sid = matching_sids[0]
+
+    proc = process_manager.get(target_sid)
     if not proc:
-        typer.echo(f"No such daemon: {daemon_id}")
+        typer.echo(f"No such daemon with session id (sid): {sid}")
         raise typer.Exit()
 
-    typer.echo(f"Attaching to Olive shell session (daemon ID {daemon_id})...")
+    typer.echo(f"Attaching to Olive shell session {target_sid})...")
     try:
-        subprocess.run(["tmux", "attach-session", "-t", daemon_id], check=True)
+        subprocess.run(["tmux", "attach-session", "-t", target_sid], check=True)
     except subprocess.CalledProcessError as e:
         typer.echo(f"Failed to attach to tmux session: {e}")
 
@@ -203,3 +269,48 @@ def run_task_command(
         typer.echo(payload)
     else:
         run_task_from_file(task_file)
+
+
+@app.command("ask")
+def ask_command(
+    prompt: str = typer.Argument(..., help="Prompt to send to olive.llm.ask"),
+):
+    """Tiny wrapper around the LLM helper so other code (and HTTP) can shell out."""
+    try:
+        from olive.llm import ask as _ask
+
+        print(_ask(prompt))
+    except Exception as exc:  # noqa: BLE001
+        # graceful degradation – echo back
+        typer.echo(f"[stub] You said: {prompt} • (ask unavailable: {exc})")
+
+
+# ---------------------------------------------------------------------
+# Serve HTTP
+# ---------------------------------------------------------------------
+@app.command("http")
+def http(
+    host: str = typer.Option("0.0.0.0", "--host"),
+    port: int = typer.Option(8000, "--port"),
+    reload: bool = typer.Option(False, "--reload", "--dev", help="Hot‑reload"),
+):
+    """Serve the Olive HTTP gateway."""
+    # ----------- ensure env defaults -----------------
+    os.environ.setdefault("OLIVE_HTTP_HOST", host)
+    os.environ.setdefault("OLIVE_HTTP_PORT", str(port))
+    os.environ.setdefault(
+        "OLIVE_HTTP_ALLOW_CMDS", "tools,tasks,task-run,task-get,context,ask"
+    )
+
+    import uvicorn
+
+    cfg = uvicorn.Config(
+        "olive.http:app", host=host, port=port, reload=reload, log_level="info"
+    )
+    server = uvicorn.Server(cfg)
+
+    def _handle_int(sig, _frame):  # noqa: D401
+        server.should_exit = True
+
+    signal.signal(signal.SIGINT, _handle_int)
+    asyncio.run(server.serve())

@@ -25,12 +25,12 @@ import threading
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
-from olive.env import get_olive_base_path
+from olive import env
 from olive.logger import get_logger
 from olive.tasks.models import Task, TaskResult, TaskSpec, TaskStatus
 
 logger = get_logger(__name__)
-OLIVE_TASK_DIR = get_olive_base_path() / "run" / "tasks"
+OLIVE_TASK_DIR = env.get_dot_olive() / "run" / "tasks"
 OLIVE_TASK_DIR.mkdir(parents=True, exist_ok=True)
 
 # ────────────────────────────────────────────────────────────────────────────────
@@ -81,10 +81,12 @@ class TaskManager:
         self.tasks: Dict[str, Task] = {}
         self._result_events: Dict[str, asyncio.Event] = {}
 
-        self._runner: Optional[asyncio.Runner] = None          # background Runner
+        self._runner: Optional[asyncio.Runner] = None  # background Runner
         self._runner_thread: Optional[threading.Thread] = None
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None
-        self._cancelled = contextvars.ContextVar("olive_task_mgr_cancelled", default=False)
+        self._cancelled = contextvars.ContextVar(
+            "olive_task_mgr_cancelled", default=False
+        )
 
         self.initialize()  # spin up immediately
 
@@ -120,7 +122,8 @@ class TaskManager:
         )
         self._runner_thread.start()
         logger.debug(
-            "[TaskManager] Background asyncio.Runner started (max=%s)", self.max_concurrency
+            "[TaskManager] Background asyncio.Runner started (max=%s)",
+            self.max_concurrency,
         )
 
     # ------------------------------------------------------------------ #
@@ -168,7 +171,9 @@ class TaskManager:
                     raise
                 except Exception as exc:  # noqa: BLE001
                     task.status = TaskStatus.FAILED
-                    task.result = TaskResult(output=None, error=str(exc), status=task.status)
+                    task.result = TaskResult(
+                        output=None, error=str(exc), status=task.status
+                    )
                     _HookRegistry.dispatch("fail", task)
                 finally:
                     task.spec.end_time = datetime.utcnow()
@@ -275,6 +280,7 @@ class TaskManager:
     def get_task(self, task_id: str) -> Optional["Task"]:
         """Return the in-memory Task object by id, or None."""
         return self.tasks.get(task_id)
+
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Public singleton

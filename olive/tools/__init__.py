@@ -18,11 +18,11 @@ from rich import print  # noqa: TID251
 from olive.logger import get_logger
 from olive.preferences import prefs
 from olive.tasks import task_manager
-from .models import ToolDescription, ToolEntry
-from .utils import extract_tool_calls
 
 # Ensure system‑prompt injectors are imported once
 from . import utils as _injectors  # noqa: F401  pylint: disable=unused-import
+from .models import ToolDescription, ToolEntry
+from .utils import extract_tool_calls
 
 logger = get_logger("tools")
 
@@ -119,7 +119,9 @@ class ToolRegistry:
     # .................................................................
 
     @staticmethod
-    def _load_management_commands(module_path: str) -> Dict[str, callable]:  # noqa: ANN001
+    def _load_management_commands(
+        module_path: str,
+    ) -> Dict[str, callable]:  # noqa: ANN001
         cmds: Dict[str, callable] = {}
         try:
             admin_mod = importlib.import_module(f"{module_path}.admin")

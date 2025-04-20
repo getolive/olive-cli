@@ -1,16 +1,17 @@
 # olive/shell/utils.py
 
 import json
-import tempfile
 import subprocess
-from shutil import which
-from pathlib import Path
-from enum import Enum, auto
-from typing import Any, Dict, Optional
-from olive.ui import console, print_error
-from olive.logger import get_logger
+import tempfile
 from asyncio.subprocess import PIPE, create_subprocess_exec
+from enum import Enum, auto
+from pathlib import Path
+from shutil import which
+from typing import Any, Dict, Optional
+
+from olive.logger import get_logger
 from olive.preferences import prefs
+from olive.ui import console, print_error
 
 logger = get_logger(__name__)
 
@@ -133,6 +134,7 @@ def _analyse_result(obj: Any) -> ResultShape:
 def _render_tool_result(result: Any) -> None:
     """Pretty‑print a TaskResult payload or raw value."""
     from rich.pretty import Pretty
+
     from olive.tasks.models import TaskResult  # local import to avoid cycles
 
     # ── unwrap TaskResult → payload ──────────────────────────────────

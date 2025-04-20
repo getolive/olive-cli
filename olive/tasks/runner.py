@@ -2,8 +2,9 @@
 
 import json
 import uuid
+
 from olive.logger import get_logger
-from olive.tasks.models import TaskSpec, TaskResult
+from olive.tasks.models import TaskResult, TaskSpec
 from olive.tools import tool_registry
 from olive.ui import console
 

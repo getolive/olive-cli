@@ -1,9 +1,10 @@
 # tools/admin.py
 from rich.console import Console
 from rich.table import Table
+
 from olive.preferences import prefs
-from olive.tools import tool_registry
 from olive.prompt_ui import olive_management_command
+from olive.tools import tool_registry
 
 
 @olive_management_command(":tools")
