@@ -1,13 +1,22 @@
 # cli/olive/tools/utils.py
 
 import re
-import xml.etree.ElementTree as ET
 from typing import List, Tuple
 
 from olive.context.injection import olive_context_injector
 from olive.logger import get_logger
 
 logger = get_logger("tools.utils")
+
+_OLIVE_BLOCK_RE = re.compile(
+    r"<olive_tool\b[^>]*>(.*?)</olive_tool>",  # non‑greedy: grabs each block
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
+_TOOL_INPUT_RE = re.compile(
+    r"<tool>(.*?)</tool>.*?<input>([\s\S]*?)</input>",
+    flags=re.IGNORECASE | re.DOTALL,
+)
 
 
 @olive_context_injector(role="system")
@@ -35,28 +44,18 @@ def render_tools_context_for_llm() -> List[str]:
 
 def extract_tool_calls(text: str) -> List[Tuple[str, str]]:
     """
-    Robustly pull out every <olive_tool>…</olive_tool> block and return
-    (tool_name, input_json) pairs.
+    Return a list of (tool_name, input_payload) tuples.
 
-    • Ignores whitespace / newlines / attributes.
-    • Silently skips malformed blocks.
+    • Robust to raw '<' '>' inside <input>.
+    • Ignores malformed blocks gracefully.
+    • No XML parsing; pure regex, so it's fast and tolerant.
     """
-    blocks = re.findall(
-        r"<olive_tool\b[^>]*>(.*?)</olive_tool>",
-        text,
-        flags=re.DOTALL | re.IGNORECASE,
-    )
-
     calls: List[Tuple[str, str]] = []
-    for raw in blocks:
-        try:
-            xml_fragment = f"<root>{raw}</root>"  # wrap so it's valid XML
-            root = ET.fromstring(xml_fragment)
-            tool = root.findtext(".//tool").strip()
-            inp = root.findtext(".//input")
-            if tool and inp is not None:
-                calls.append((tool, inp.strip()))
-        except ET.ParseError:
-            # Skip ill‑formed XML silently
-            continue
+    for block in _OLIVE_BLOCK_RE.findall(text):
+        m = _TOOL_INPUT_RE.search(block)
+        if not m:
+            continue  # skip malformed / partial blocks
+        tool, inp = m.group(1).strip(), m.group(2).strip()
+        if tool and inp:
+            calls.append((tool, inp))
     return calls
