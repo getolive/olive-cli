@@ -66,31 +66,20 @@ to any protocol or framework.
 git clone https://github.com/getolive/olive && cd olive
 
 # Create a fresh virtual environment
-python3.11 -m venv .venv && source .venv/bin/activate
+uv venv && source .venv/bin/activate
 
 # Install dependencies using uv (recommended)
 uv pip install -e .
 
-# Run Olive once to initialize project structure
-olive
+# Run Olive init to initialize project structure
+olive init
 ```
 
 # 4. bootstrap user config
 ### Quick Start
 
 ```bash
-olive spec create "Add GitHub OAuth"
-olive spec use
-```
-
-This activates **Builder Mode**, where Olive focuses on a specific feature (`spec`) and proposes a concrete plan.
-
-From there, use `olive shell` to enter a conversational CLI that supports planning, editing, and tool execution.
-
-```bash
-:spec create "Add OAuth login"
-:spec use                   # activates latest Spec
-# Olive enters Builder Mode and proposes a plan
+olive shell # and then type ```:help``` or just ask olive about itself and what you'd like to do.
 ```
 
 Key commands:
