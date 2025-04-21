@@ -20,6 +20,21 @@ tmux, and sandboxing via containers.
 
 Olive is experimental.
 
+### 🧠 Local Models, Real Tools
+
+**[Ollama](https://ollama.com) + Olive — a match made in heaven.**
+Olive prefers local execution via Ollama, using an OpenAI-compatible API.
+
+Tool use? Protocol-agnostic by design. Olive just names the tools, describes
+what they do, and shows a couple examples.
+
+MCP is on the roadmap — it's becoming a lingua franca — but Olive isn’t locked
+to any protocol or framework.
+
+> A working thesis: as models get smarter, the best interface is clarity of
+> purpose, crisp examples, and real practice. Just like with people.
+
+
 ---
 ## Feature Summary
 
