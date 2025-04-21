@@ -66,7 +66,7 @@ def build_safe_env() -> Dict[str, str]:
             # Create a very small shell script that blocks execution
             fake.write_text(
                 "#!/bin/sh\n"
-                f'echo "\U0001f6d1  Command \'{cmd}\' is blocked by Olive preferences."\n'
+                f"echo \"\U0001f6d1  Command '{cmd}' is blocked by Olive preferences.\"\n"
                 "exit 127\n"
             )
             fake.chmod(0o755)
