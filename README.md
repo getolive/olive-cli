@@ -63,7 +63,7 @@ to any protocol or framework.
 
 ```bash
 # Clone the repo
-git clone https://github.com/getolive/olive && cd olive
+git clone https://github.com/getolive/olive-cli.git && cd olive-cli
 
 # Create a fresh virtual environment
 uv venv && source .venv/bin/activate
