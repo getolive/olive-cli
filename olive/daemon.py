@@ -96,7 +96,9 @@ class ProcessInfo:
     def kill(self):
         try:
             subprocess.run(["tmux", "kill-session", "-t", self.daemon_id], check=True)
-            logger.info(f"TODO: not implemented properly yet ::: Killed tmux session for daemon ID {self.daemon_id}")
+            logger.info(
+                f"TODO: not implemented properly yet ::: Killed tmux session for daemon ID {self.daemon_id}"
+            )
             self.delete()
             return True
         except subprocess.CalledProcessError as e:

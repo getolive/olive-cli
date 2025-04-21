@@ -126,6 +126,7 @@ def get_sandbox_run_root() -> Path:
 
     return _ensure_dir(get_run_root() / "sbx" / sid)
 
+
 # ──────────────────────────────────────────────────────────────
 # sandbox‑scoped convenience getters
 # ──────────────────────────────────────────────────────────────
@@ -147,6 +148,7 @@ def get_sandbox_logs_dir() -> Path:
 def get_task_file(result_id: str) -> Path:
     """Convenience: absolute path for a *task‑spec* JSON inside the RPC dir."""
     return get_sandbox_rpc_dir() / f"{result_id}.json"
+
 
 # ──────────────────────────────────────────────────────────────
 # task‑results helpers (work for host *and* container)

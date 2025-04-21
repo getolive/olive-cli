@@ -207,6 +207,7 @@ def prune_command():
 @app.command("attach")
 def attach_to_daemon_session(sid: str = typer.Argument(None)):
     """Attach/Resume interaction with a background daemon."""
+
     def no_match_exit():
         typer.echo(
             "Please specify a daemon ID. Run `olive ps` to view running daemons."
