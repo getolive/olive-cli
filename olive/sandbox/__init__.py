@@ -229,7 +229,7 @@ class SandboxManager:
             f"OLIVE_SANDBOX_DIR=/mnt/project/.olive/run/sbx/{sid}",
             *mnt_args,
             "--workdir",
-            "/sandbox",
+            "/mnt/project",
             "olive/sandbox:latest",
             "daemon",
         ]
