@@ -162,7 +162,8 @@ def _render_tool_result(result: Any) -> None:
             if err := result.get("stderr", "").rstrip():
                 print_error(err)
             if (rc := result.get("returncode")) is not None:
-                console.print(f"[dim]exit code {rc}[/dim]")
+                if rc != 0:
+                    console.print(f"[dim]exit code {rc}[/dim]")
 
         case ResultShape.GENERIC_DICT:
             console.print(Pretty(result, max_string=120))

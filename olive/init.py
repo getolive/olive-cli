@@ -122,29 +122,6 @@ def initialize_shell_session():
     start_sandbox_if_enabled(prefs)
 
 
-def initialize_olive():
-    project_root_path = Path.cwd().resolve()
-    logger.info(f"Starting Olive initialization @ {project_root_path}")
-    env.set_project_root(project_root_path)
-
-    if not validate_git_repo():
-        return
-
-    prefs = get_prefs_lazy()
-    if not prefs.initialized:
-        print_error("Olive requires a preferences.yml to function.")
-        print_info("Please create ~/.olive/preferences.yml and retry.")
-        logger.error("Preferences not initialized.")
-        return
-
-    ensure_directories()
-    context.hydrate()
-    discover_components()
-
-    print_success("Initialized Olive in .olive/")
-    logger.info("Initialization complete.")
-
-
 def validate_olive():
     """Validates user/project Olive configuration and context."""
     try:
@@ -214,3 +191,26 @@ def validate_olive():
         )
     else:
         print_error("⚠️ No .gitignore file found")
+
+
+def initialize_olive():
+    project_root_path = Path.cwd().resolve()
+    logger.info(f"Starting Olive initialization @ {project_root_path}")
+    env.set_project_root(project_root_path)
+
+    if not validate_git_repo():
+        return
+
+    prefs = get_prefs_lazy()
+    if not prefs.initialized:
+        print_error("Olive requires a preferences.yml to function.")
+        print_info("Please create ~/.olive/preferences.yml and retry.")
+        logger.error("Preferences not initialized.")
+        return
+
+    ensure_directories()
+    context.hydrate()
+    discover_components()
+
+    print_success("Initialized Olive in .olive/")
+    logger.info("Initialization complete.")

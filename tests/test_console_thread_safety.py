@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from contextlib import contextmanager
 from typing import Callable
 
 import pytest
@@ -31,9 +30,9 @@ MAIN_THREAD = threading.current_thread()
 
 
 def _assert_main_thread(where: str):
-    assert (
-        threading.current_thread() is MAIN_THREAD
-    ), f"Rich {where} invoked from background thread!"
+    assert threading.current_thread() is MAIN_THREAD, (
+        f"Rich {where} invoked from background thread!"
+    )
 
 
 # --------------------------------------------------------------------------- #
