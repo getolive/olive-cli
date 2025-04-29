@@ -1,6 +1,6 @@
-# Olive CLI — Local‑First AI Development Shell (Experimental)
+# Olive CLI — an agentic utility; repl, daemon, and runtime. [status: pre-v1, experimental]
 
-**Olive CLI** is a command-line AI coding assistant designed for experienced engineers who want fine-grained control over AI-assisted development. It runs entirely on your machine, treating each coding task as a structured **Spec** (with clear objectives, checklists, context, and progress) instead of an open-ended chat. By using local models when available and real developer tools (files, shell, Git, Docker), Olive emphasizes transparency, reproducibility, and privacy over cloud-dependent or editor-locked solutions.
+**Olive CLI** is designed for engineers who want AL leverage with fine-grained control, customizability, and interop with existing standard tooling (like your shell, tmux, docker/podman, ollama, logging). It runs entirely on your machine (or optionally via OpenAI API-compatible cloud providers), optionally treating tasks as structured **Spec** objects (with clear objectives, checklists, context, and progress) instead of an open-ended chat. By using local models when available and real developer tools (files, shell, Git, Docker), Olive emphasizes transparency, reproducibility, and privacy over cloud-dependent or editor-locked solutions.
 
 Olive is **not** a general-purpose “AI pair programmer” that just completes code in an IDE. It’s a lightweight, programmable development shell that can plan, generate, and integrate code with your guidance. All AI actions (like creating files, running tests, modifying code) are explicit, logged, and under your control – making Olive a high-end utility for power users who demand insight and auditability in AI-assisted coding.
 
@@ -57,7 +57,8 @@ Olive is an early-stage project, so installation is from source:
 3. **Initialize an Olive project:**
 
    ```bash
-   olive init
+   source .venv/bin/activate
+   olive init # (or % git init && olive init)
    ```
    This creates a `.olive/` directory in the current folder with the necessary subfolders (such as `specs/`, `run/`, etc.) and a default config. Each project you use Olive on should be initialized once.
 
@@ -68,6 +69,7 @@ Now you’re ready to use Olive in that project directory.
 Launch the interactive shell with:
 
 ```bash
+source <path-to-olive-cli>/.venv/bin/activate
 olive shell
 ```
 
