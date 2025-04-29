@@ -1,4 +1,6 @@
-# Olive CLI — an agentic utility; repl, daemon, and runtime. [status: pre-v1, experimental]
+# Olive CLI — an agentic utility; repl, daemon, and runtime.
+
+![Status](https://img.shields.io/badge/status-pre--v1,_experimental-orange)
 
 **Olive CLI** is designed for engineers who want AL leverage with fine-grained control, customizability, and interop with existing standard tooling (like your shell, tmux, docker/podman, ollama, logging). It runs entirely on your machine (or optionally via OpenAI API-compatible cloud providers), optionally treating tasks as structured **Spec** objects (with clear objectives, checklists, context, and progress) instead of an open-ended chat. By using local models when available and real developer tools (files, shell, Git, Docker), Olive emphasizes transparency, reproducibility, and privacy over cloud-dependent or editor-locked solutions.
 
