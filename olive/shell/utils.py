@@ -157,10 +157,12 @@ def _render_tool_result(result: Any) -> None:
             console.print(result)
 
         case ResultShape.TOOL_STD:
-            if out := result.get("stdout", "").rstrip():
-                console.print(out)
-            if err := result.get("stderr", "").rstrip():
-                print_error(err)
+            out = str(result.get("stdout", "") or "")
+            if out.rstrip():
+                console.print(out.rstrip())
+            err = str(result.get("stderr", "") or "")
+            if err.rstrip():
+                print_error(err.rstrip())
             if (rc := result.get("returncode")) is not None:
                 if rc != 0:
                     console.print(f"[dim]exit code {rc}[/dim]")

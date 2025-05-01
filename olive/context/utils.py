@@ -59,7 +59,6 @@ def render_file_context_for_llm() -> List:
             content = "\n".join(ef.lines)
             messages.append(f"# file: {ef.path} ({len(ef.lines)} lines)\n{content}")
 
-    print(f"{len(seen_extra)} extra seen.")
     return messages
 
 

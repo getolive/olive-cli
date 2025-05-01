@@ -16,3 +16,5 @@ zipper.sh
 docs/
 scripts/
 olive/http/
+out/
+web/
