@@ -15,7 +15,7 @@ _CONTEXT_INJECTORS: Dict[PromptRole, List[Callable[[], List[dict]]]] = {
 
 def olive_context_injector(role: PromptRole = "system"):
     """
-    Register a function that returns prompt messages to inject during context hydration.
+    Register a function that returns prompt messages to inject during llm payload hydration.
 
     Usage:
         @olive_context_injector()              # defaults to system

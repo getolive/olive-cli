@@ -1,5 +1,4 @@
 # cli/olive/prompt_ui.py
-# cli/olive/prompt_ui.py
 """
 prompt_ui.py manages the host shell interactions with Olive including
  - registering global :commands
@@ -16,8 +15,9 @@ import shutil
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
-from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.completion import Completer, Completion, PathCompleter
 from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.document import Document
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
 
@@ -143,6 +143,13 @@ class OliveCompleter(Completer):
                     yield Completion(
                         match, start_position=-len(path_start), display=display
                     )
+
+        # @ prefix (adding files to context)
+        elif text.startswith("@"):
+            completer = PathCompleter(expanduser=True)
+            subtext = text[1:].lstrip()
+            doc = Document(subtext, cursor_position=len(subtext))
+            yield from completer.get_completions(doc, complete_event)
 
 
 # ─── Key Bindings ──────────────────────────────────────────────────

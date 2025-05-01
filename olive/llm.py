@@ -91,7 +91,7 @@ class LLMProvider:
 
         Abstract mode determines whether we inject metadata summaries or raw file content.
         """
-        from olive.context.utils import is_abstract_mode_enabled
+        from olive.context.utils import render_file_context_for_llm
 
         context.hydrate()
         messages = []
@@ -110,29 +110,7 @@ class LLMProvider:
         )
 
         # 3. Inject user-facing context
-        user_blocks = []
-
-        if is_abstract_mode_enabled():
-            for path, entries in context.state.metadata.items():
-                if not entries:
-                    continue
-                block = "\n".join(f"{e.type} {e.name} ({e.location})" for e in entries)
-                user_blocks.append(
-                    f"# metadata: {path} ({len(entries)} items)\n{block}"
-                )
-            logger.info(
-                f"[llm] Injecting {len(user_blocks)} metadata summaries (abstract mode enabled)"
-            )
-        else:
-            for f in context.state.files:
-                if f.lines:
-                    body = "\n".join(f.lines)
-                    user_blocks.append(
-                        f"# file: {f.path} ({len(f.lines)} lines)\n{body}"
-                    )
-            logger.info(
-                f"[llm] Injecting {len(user_blocks)} full file contents (abstract mode disabled)"
-            )
+        user_blocks = render_file_context_for_llm()
 
         # 4. Final user message
         injected = "\n\n".join(user_blocks).strip()

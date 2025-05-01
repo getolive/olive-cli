@@ -59,7 +59,7 @@ class Preferences:
         """with sandbox enabled olive's dispatcher will run commands in the sandbox instead of on the host."""
         return bool(self.get("sandbox", "enabled", default=False))
 
-    def is_abstract_mode_enabled() -> bool:
+    def is_abstract_mode_enabled(self) -> bool:
         """in abstract mode olive's context manager will prioritize abstract syntax tree sharing over raw files."""
         return str(
             prefs.get("context", "abstract", "enabled", default=False)

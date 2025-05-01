@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Union
 
 from olive.context.models import ASTEntry, ChatMessage, Context, ContextFile
-from olive.context.utils import extract_ast_info, is_abstract_mode_enabled
+from olive.context.utils import extract_ast_info
 from olive.env import get_project_root
 from olive.gitignore import is_ignored_by_git
 from olive.logger import get_logger
@@ -78,8 +78,29 @@ class OliveContext:
     def inject_system_message(self, content: Union[str, dict]):
         return injection.append_system_prompt_injection(content)
 
-    def add_file(self, path: str, lines: list[str]):
-        self.state.files.append(ContextFile(path=path, lines=lines))
+    def add_extra_file(self, path: str, lines: list):
+        """Add a file (by path) to extra_files."""
+        norm_path = self._normalize_path(path)
+        if any(
+            self._normalize_path(f.path) == norm_path for f in self.state.extra_files
+        ):
+            raise FileExistsError(f"Extra file already exists: {norm_path}")
+        self.state.extra_files.append(ContextFile(path=norm_path, lines=lines))
+
+    def remove_extra_file(self, path: str) -> int:
+        """Remove a file (by path) to extra_files."""
+        norm_path = self._normalize_path(path)
+        before = len(self.state.extra_files)
+        self.state.extra_files = [
+            f
+            for f in self.state.extra_files
+            if self._normalize_path(f.path) != norm_path
+        ]
+        return before - len(self.state.extra_files)
+
+    @staticmethod
+    def _normalize_path(path: str) -> str:
+        return str(Path(path).expanduser().resolve())
 
     def add_metadata(self, path: str, entries: list[ASTEntry]):
         self.state.metadata[path] = entries
@@ -104,7 +125,8 @@ class OliveContext:
         self.state.files = payload
 
         # 4. Hydrate AST metadata (if abstract mode enabled)
-        if is_abstract_mode_enabled():
+        # todo..
+        if prefs.is_abstract_mode_enabled():
             for f in payload:
                 path = f.path
                 try:
@@ -154,7 +176,21 @@ class OliveContext:
 
         return payload
 
-    def _discover_files(self) -> list[Path]:
+    def is_file_excluded(self, rel) -> bool:
+        """
+        A simple helper to confirm whether the path (rel) is allowed by preferences.
+        """
+        exclude_patterns = prefs.get("context", "exclude", "patterns", default=[])
+        exclude_paths = set(prefs.get("context", "exclude", "paths", default=[]))
+        respect_gitignore = prefs.get("context", "respect_gitignore", default=True)
+        rel_str = str(rel)
+        return (
+            any(fnmatch.fnmatch(rel_str, pat) for pat in exclude_patterns)
+            or rel_str in exclude_paths
+            or (respect_gitignore and is_ignored_by_git(rel_str))
+        )
+
+    def _discover_files(self, inclue_extra_files=True) -> list[Path]:
         """
         Discover project source files to include in the Olive context.
 
@@ -177,25 +213,15 @@ class OliveContext:
         Notes:
             - Only regular files are returned; symlinks and non-files are skipped.
             - Directory traversal excludes common unwanted folders (e.g., .git, __pycache__).
+            - Extra files are added or skipped based on the value for include_extra_files parameter.
         """
         include_patterns = prefs.get("context", "include", "patterns", default=[])
         include_paths = prefs.get("context", "include", "paths", default=[])
-        exclude_patterns = prefs.get("context", "exclude", "patterns", default=[])
-        exclude_paths = set(prefs.get("context", "exclude", "paths", default=[]))
-        respect_gitignore = prefs.get("context", "respect_gitignore", default=True)
         max_files = prefs.get("context", "max_files", default=10)
 
         root = get_project_root()
         found: set[Path] = set()
         files_considered = 0
-
-        def is_excluded(rel: Path) -> bool:
-            rel_str = str(rel)
-            return (
-                any(fnmatch.fnmatch(rel_str, pat) for pat in exclude_patterns)
-                or rel_str in exclude_paths
-                or (respect_gitignore and is_ignored_by_git(rel_str))
-            )
 
         # Common directories to skip entirely
         ignored_dirs = {".git", "__pycache__", ".venv", "node_modules", ".olive"}
@@ -214,7 +240,7 @@ class OliveContext:
                     fnmatch.fnmatch(fpath.name, pat) for pat in include_patterns
                 ):
                     continue
-                if is_excluded(rel_path):
+                if self.is_file_excluded(rel_path):
                     continue
 
                 found.add(rel_path)
@@ -233,10 +259,11 @@ class OliveContext:
         logger.info(
             f"Discovered {len(found)} context files (from {files_considered} scanned)."
         )
+
         return sorted(found)[:max_files] if max_files >= 0 else sorted(found)
 
     def hydrate_summary(self) -> str:
-        return f"🧠 {len(self.state.files)} files | {len(self.state.chat)} chat | {len(self.state.system)} system"
+        return f"🧠 {len(self.state.files)} files ({len(self.state.extra_files)} extra files) | {len(self.state.chat)} chat | {len(self.state.system)} system"
 
     def to_dict(self) -> dict:
         return self.state.model_dump()
