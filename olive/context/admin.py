@@ -4,7 +4,6 @@ import tempfile
 from pathlib import Path
 
 from rich import print
-from rich.console import Console
 from rich.tree import Tree
 
 from olive.canonicals.spec.models import FeatureSpec
@@ -14,9 +13,9 @@ from olive.logger import get_logger
 from olive.preferences import prefs
 from olive.prompt_ui import olive_management_command
 from olive.tools.spec.state import get_active_spec_id
+from olive.ui import console
 
 logger = get_logger("context-admin")
-console = Console()
 
 CHAT_PREVIEW_CHARS = 100
 
@@ -103,6 +102,11 @@ def show_context_summary():
             folders[parent].add(line_label)
 
         print(file_tree)
+
+    if context.state.extra_files:
+        print("\nExtra Files: ")
+        for context_file in context.state.extra_files:
+            print(f"{context_file.path} [{len(context_file.lines)} lines]")
 
     print("\n" + "-" * 60)
     print("\n[dim]Run :mock-ask to view full LLM payload.[/dim]")

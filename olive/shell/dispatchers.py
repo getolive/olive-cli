@@ -11,6 +11,7 @@ from olive.logger import get_logger
 from olive.prompt_ui import get_management_commands
 from olive.tasks import task_manager
 from olive.tools import tool_registry
+
 from olive.ui import console, print_error, print_success, print_warning
 
 from .utils import _render_tool_result
@@ -40,6 +41,10 @@ async def dispatch(user_input: str, interactive: bool):
 
     if user_input.startswith("!"):
         _dispatch_shell_exec(user_input[1:])
+        return
+
+    if user_input.startswith("@"):
+        _dispatch_atcommand(user_input[1:])
         return
 
     return await _dispatch_llm(user_input, interactive)
@@ -153,3 +158,28 @@ def _dispatch_shell_exec(command: str):
     except Exception as e:
         print_error(f"Shell command failed: {e}")
         logger.exception(f"Shell command error: {e}")
+
+
+def _dispatch_atcommand(user_input: str):
+    """
+    At Commands (@...) are used to manage files in context manually.
+    @path (optionally appended with -f, to force) will add the given path to context.
+    """
+    from olive.context.utils import safe_add_extra_context_file, safe_remove_extra_context_file
+
+    tokens = shlex.split(user_input)
+    force = False
+    remove = False
+    if tokens:
+        if tokens[-1] == "-f":
+            force = True
+        if tokens[-1] == "-r":
+            remove = True
+        if force or remove:
+            tokens = tokens[:-1]
+
+    path = " ".join(tokens)
+    if remove:
+        safe_remove_extra_context_file(path)
+    else:
+        safe_add_extra_context_file(path, force=force)

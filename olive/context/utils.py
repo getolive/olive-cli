@@ -16,12 +16,12 @@ logger = get_logger(__name__)
 
 
 @olive_context_injector(role="user")
-def render_file_context_for_llm() -> List[str]:
+def render_file_context_for_llm() -> List:
     """
     Render user-facing prompt fragments from Olive context files.
 
-    - If `abstract.mode.enabled: true`, inject structural summaries from AST metadata.
-    - Otherwise, inject full file contents (respecting line limits).
+    - If `abstract.mode.enabled: true`, inject structural summaries from AST metadata for main files.
+    - Always append full file contents for extra_files at the end.
     """
     from olive.context import context  # lazy import
 
@@ -29,6 +29,7 @@ def render_file_context_for_llm() -> List[str]:
 
     messages = []
 
+    # Collect main file context
     if prefs.is_abstract_mode_enabled():
         for path, entries in context.state.metadata.items():
             if not entries:
@@ -39,16 +40,26 @@ def render_file_context_for_llm() -> List[str]:
             messages.append(f"# metadata: {path} ({len(entries)} items)\n{summary}")
 
         logger.info(
-            f"[context] Injected metadata for {len(context.state.metadata)} files."
+            f" Injected metadata for {len(context.state.metadata)} files."
         )
     else:
+        seen = set()
         for f in context.state.files:
-            content = "\n".join(f.lines)
-            messages.append(f"# file: {f.path} ({len(f.lines)} lines)\n{content}")
-        logger.info(
-            f"[context] Injected raw file content for {len(context.state.files)} files."
-        )
+            if f.path not in seen:
+                seen.add(f.path)
+                content = "\n".join(f.lines)
+                messages.append(f"# file: {f.path} ({len(f.lines)} lines)\n{content}")
+        logger.info(f" Injected raw file content for {len(seen)} files.")
 
+    # Always append full content for extra_files (even in abstract mode)
+    seen_extra = set()
+    for ef in context.state.extra_files:
+        if ef.path not in seen_extra:
+            seen_extra.add(ef.path)
+            content = "\n".join(ef.lines)
+            messages.append(f"# file: {ef.path} ({len(ef.lines)} lines)\n{content}")
+
+    print(f"{len(seen_extra)} extra seen.")
     return messages
 
 
@@ -64,16 +75,6 @@ def get_git_diff_stats():
         return stats
     except Exception:
         return {}
-
-
-def is_abstract_mode_enabled() -> bool:
-    prefs = get_prefs_lazy()
-
-    return str(prefs.get("context", "abstract", "enabled", default=False)).lower() in (
-        "1",
-        "true",
-        "yes",
-    )
 
 
 def extract_ast_info(filepath: str) -> dict:
@@ -151,3 +152,103 @@ def extract_ast_info(filepath: str) -> dict:
         },
         "entries": entries,
     }
+
+
+def safe_add_extra_context_file(path_str, force=False):
+    """
+    Adds a file to Olive context by user-facing path (absolute or project-relative).
+    Handles ignore rules, file reading, and error messaging.
+    Returns True if added, False otherwise.
+    """
+    from olive.ui import print_error, print_success, print_warning
+    from olive.context import context
+
+    root = get_project_root()
+    path = Path(path_str).expanduser()
+    if not path.is_absolute():
+        path = (root / path).resolve()
+
+    if not path.exists() or not path.is_file():
+        print_error(f"{path} does not exist or is not a file.")
+        return False
+
+    try:
+        rel_path = str(path.relative_to(root))
+        path_for_context = rel_path
+        outside_root = False
+    except ValueError:
+        # Path is outside project root
+        path_for_context = str(path)
+        outside_root = True
+
+    excluded = context.is_file_excluded(path_for_context)
+    if excluded and not force:
+        print_error(
+            f"{path_for_context} is excluded/ignored by your context rules. Use -f to force addition."
+        )
+        return False
+    if excluded and force:
+        print_warning(
+            f"{path_for_context} is excluded by context rules, but forcibly adding (-f)."
+        )
+    if outside_root and not force:
+        print_error(
+            f"{path_for_context} is outside the project root. Use -f to force addition."
+        )
+        return False
+    if outside_root and force:
+        print_warning(
+            f"{path_for_context} is outside the project root. Forcibly adding (-f)."
+        )
+
+    try:
+        lines = path.read_text(errors="ignore").splitlines()
+    except Exception as e:
+        print_error(f"Failed to read {path_for_context}: {e}")
+        return False
+    try:
+        context.add_extra_file(str(path_for_context), lines)
+        context.save()
+        print_success(f"Added {path_for_context} to context.")
+        return True
+    except FileExistsError:
+        print_error(
+            "Refused to add {str(path_for_context)} because this file is already in extra_files."
+        )
+    return False
+
+
+def safe_remove_extra_context_file(path_str):
+    """
+    Removes a file from Olive context by user-facing path (absolute or project-relative).
+
+    Handles appropriate path normalization and user-facing messages.
+    Returns True if removed, False otherwise.
+    """
+    from olive.ui import print_error, print_success, print_info
+    from olive.context import context
+
+    root = get_project_root()
+    path = Path(path_str).expanduser()
+    if not path.is_absolute():
+        path = (root / path).resolve()
+
+    try:
+        rel_path = str(path.relative_to(root))
+        path_for_context = rel_path
+    except ValueError:
+        # Path is outside project root
+        path_for_context = str(path)
+
+    try:
+        count = context.remove_extra_file(str(path_for_context))
+        context.save()
+        if count == 0:
+            print_info(f"{path_for_context} is not in extra context files.")
+        else:
+            print_success(f"Removed {path_for_context} from context.")
+        return True
+
+    except Exception as e:
+        print_error(f"Failed to remove {path_for_context}: {e}")
+    return False
