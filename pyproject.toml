@@ -51,7 +51,10 @@ dev = [
 # ---------------------------------------------------------------------------
 [project.scripts]
 olive = "olive.cli:app"
-# `olive.http.bootstrap` can be run via `python -m` or uvicorn; no extra console script yet.
 
-[tool.setuptools.packages.find]
-include = ["olive*"]
+[tool.setuptools]
+packages = { find = { include = ["olive*"] } }
+include-package-data = true
+
+[tool.setuptools.package-data]
+"olive" = ["**/*", "!**/*.py"]
