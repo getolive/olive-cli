@@ -6,6 +6,8 @@
 
 Olive is **not** a general-purpose “AI pair programmer” that just completes code in an IDE. It’s a lightweight, programmable development shell that can plan, generate, and integrate code with your guidance. All AI actions (like creating files, running tests, modifying code) are explicit, logged, and under your control – making Olive a high-end utility for power users who demand insight and auditability in AI-assisted coding.
 
+<video src="demo/demo.mp4" autoplay loop muted playsinline style="max-width:100%; border:1px solid #444;" />
+
 ## Key Features
 
 - **Local-First Operation:** Optimized to run with local LLMs via [Ollama](https://ollama.com) for 100% offline use if desired. (Olive can also call OpenAI/Anthropic APIs if configured, but it prefers a local endpoint by default.) This contrasts with many other agentic coding tools (e.g. Anthropic’s *Claude Code* or VS Code-based *Cline*) which require cloud APIs – Olive lets you keep code and AI reasoning on your machine.
