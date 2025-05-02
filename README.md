@@ -6,7 +6,8 @@
 
 Olive is **not** a general-purpose “AI pair programmer” that just completes code in an IDE. It’s a lightweight, programmable development shell that can plan, generate, and integrate code with your guidance. All AI actions (like creating files, running tests, modifying code) are explicit, logged, and under your control – making Olive a high-end utility for power users who demand insight and auditability in AI-assisted coding.
 
-<video src="demo/demo.mp4" autoplay loop muted playsinline style="max-width:100%; border:1px solid #444;" />
+
+https://github.com/user-attachments/assets/20f1964a-8e0d-42d0-a733-d42f6f840c57
 
 ## Key Features
 
