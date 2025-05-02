@@ -1,6 +1,13 @@
 # Olive CLI — an agentic utility; repl, daemon, and runtime.
 
 ![Status](https://img.shields.io/badge/status-pre--v1,_experimental-orange)
+```bash
+# install
+uv pip install "git+https://github.com/getolive/olive-cli.git"
+
+# dependencies:
+# POSIX host, docker (if using sandbox support), astral's uv, python >3.11
+```
 
 **Olive CLI** is designed for engineers who prefer to work with AI as a tool/utility - with fine-grained control, customizability, and interop with existing standard tooling (like your shell, tmux, docker/podman, ollama, logging). It runs entirely on your machine (or optionally via OpenAI API-compatible cloud providers), optionally treating tasks as structured **Spec** objects (with clear objectives, checklists, context, and progress) instead of an open-ended chat. By using local models when available and real developer tools (files, shell, Git, Docker), Olive emphasizes transparency, reproducibility, and privacy over cloud-dependent or editor-locked solutions.
 
