@@ -165,7 +165,10 @@ def _dispatch_atcommand(user_input: str):
     At Commands (@...) are used to manage files in context manually.
     @path (optionally appended with -f, to force) will add the given path to context.
     """
-    from olive.context.utils import safe_add_extra_context_file, safe_remove_extra_context_file
+    from olive.context.utils import (
+        safe_add_extra_context_file,
+        safe_remove_extra_context_file,
+    )
 
     tokens = shlex.split(user_input)
     force = False

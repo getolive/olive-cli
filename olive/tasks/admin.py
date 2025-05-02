@@ -22,7 +22,10 @@ def tasks_list_command(arg: str = None):
     """\
     List recent Olive tasks. (:tasks --all --> show all known tasks)
     """
-    show_all = (arg or "").strip() == "--all"
+    arg = (arg or "").strip()
+    show_all = arg == "--all"
+    single_task_partial = arg if arg and not show_all else None
+
     tasks = get_task_manager_lazy().list_tasks()
     if not tasks:
         print_warning("[dim]No tasks found.[/dim]")
@@ -31,6 +34,17 @@ def tasks_list_command(arg: str = None):
     sorted_tasks = sorted(
         tasks.items(), key=lambda item: item[1].get("start") or "", reverse=True
     )
+
+    if single_task_partial:
+        matches = [tid for tid, _ in sorted_tasks if tid.startswith(single_task_partial)]
+        if not matches or len(matches) <= 0:
+            print_error(f"No match found for task id partial {single_task_partial}")
+            return
+        elif len(matches) > 1:
+            print_warning(f"Multiple matches for '{single_task_partial}': {', '.join(matches)}. Showing first.")
+
+        task_get_command(matches[0], show_only_rendered_result=True)
+        return
 
     if not show_all:
         sorted_tasks = sorted_tasks[:10]
@@ -77,7 +91,7 @@ def tasks_list_command(arg: str = None):
 
 
 @olive_management_command(":task-get")
-def task_get_command(task_id: str = None):
+def task_get_command(task_id: str = None, show_only_rendered_result=False):
     """\
     Show the full in-memory task spec + result. (:task-get <task_id> --> task_id details)
     """
@@ -90,10 +104,14 @@ def task_get_command(task_id: str = None):
         print_error(f"Task not found: {task_id}")
         return
 
-    # ✅ Handles all serialization cases safely
-    console.print_json(data=json.loads(task.json()))
-    # print_json(data=<dict>)   # for structured data
-    # print_json(json=<str>)    # for raw JSON string
+    if show_only_rendered_result:
+        from olive.shell.utils import _render_tool_result
+        _render_tool_result(task.result)
+    else:
+        # ✅ Handles all serialization cases safely
+        console.print_json(data=json.loads(task.json()))
+        # print_json(data=<dict>)   # for structured data
+        # print_json(json=<str>)    # for raw JSON string
 
 
 @olive_management_command(":task-result")
