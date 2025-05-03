@@ -1,156 +1,149 @@
 # cli/olive/context/utils.py
 
-import ast
 import subprocess
 from pathlib import Path
-from typing import List
 
 from olive.context.injection import olive_context_injector
 from olive.env import get_project_root
 from olive.logger import get_logger
 from olive.preferences.admin import get_prefs_lazy
+from olive.context.models import ASTEntry
 
-from .models import ASTEntry
 
 logger = get_logger(__name__)
 
 
 @olive_context_injector(role="user")
-def render_file_context_for_llm() -> List:
+def render_file_context_for_llm() -> list[str]:
     """
-    Render user-facing prompt fragments from Olive context files.
+    Build the prompt fragments that Olive feeds into the LLM.
 
-    - If `abstract.mode.enabled: true`, inject structural summaries from AST metadata for main files.
-    - Always append full file contents for extra_files at the end.
+    ── Modes ───────────────────────────────────────────────────────────
+      • Abstract  → concise AST summaries (after roll-up filters)
+      • Raw       → full file bodies
+      • Extra     → always raw, always appended
+
+    All heavy lifting (Tailwind collapse, HTML skeleton, …) now lives in
+    `olive.context.rollups` plug-ins, keeping this function tiny.
     """
-    from olive.context import context  # lazy import
+
+    from olive.context import context  # lazy import to avoid cycles
+    from olive.context.extractors import ROLLUPS
 
     prefs = get_prefs_lazy()
+    logger = get_logger(__name__)
+    out: list[str] = []
 
-    messages = []
+    _DEDUPE = ROLLUPS["*"]
 
-    # Collect main file context
+    # ── helpers ────────────────────────────────────────────────────────
+    def _short(loc):
+        return loc.split(":", 1)[1] if ":" in loc else loc
+
+    def _apply_rollup(entries: list[ASTEntry], path: str) -> list[ASTEntry]:
+        """Language-specific → outline-expander → dedupe."""
+        fn_lang = ROLLUPS.get(Path(path).suffix.lower())
+        if fn_lang:
+            entries = list(fn_lang(entries, path))
+
+        entries = list(ROLLUPS["outline"](entries, path))  # NEW
+        return list(_DEDUPE(entries, path))
+
+    # NEW ▸ format a single ASTEntry -----------------------------------
+    def _render(e: ASTEntry) -> str:
+        """
+        One-liner for a single ASTEntry.
+
+        Order of precedence
+        -------------------
+        1. file_header    → “[1:N] file.py (1.23 kb)”
+        2. outline_line   → keeps leading spaces
+        3. markdown Hx    → “[42] ## Title”
+        4. generic        → prototype or .name  (+ optional doc-string intro)
+        """
+
+        # ── location “box” ────────────────────────────────────────────────
+        s = e.metadata.get("start")  # may be None
+        e_ = e.metadata.get("end")  # may be None / equal to start
+
+        if s is None:
+            loc = "[:]"
+        elif e_ is None or e_ == s:
+            loc = f"[{s}:]"  # open-ended / single-line
+        else:
+            loc = f"[{s}:{e_}]"
+
+        # 1️⃣ file header --------------------------------------------------
+        if e.type == "file_header":
+            kb = e.metadata.get("bytes", 0) / 1024
+            return f"{loc} {e.name} ({kb:.2f} kb)"
+
+        # 2️⃣ HTML / outline expander line --------------------------------
+        if e.metadata.get("outline_line"):
+            return f"{loc} {e.name}"
+
+        # 3️⃣ Markdown headings -------------------------------------------
+        if e.type.startswith("heading_h"):
+            lvl = int(e.type[-1])  # heading_h3  →  3
+            loc = f"[{s}]" if s else "[:]"
+            return f"{loc} {'#' * lvl} {e.name}"
+
+        # 4️⃣ generic row --------------------------------------------------
+        proto = (e.code.splitlines()[0] if e.code else e.name).strip()
+
+        # prepend doc-string / summary first line, if any
+        if e.summary:
+            first = e.summary.strip().splitlines()[0]
+            first = (first[:77] + "…") if len(first) > 80 else first
+            proto = f"{proto}  — {first}"
+
+        return f"{loc} {proto}"
+
+    # ── abstract-mode injection ───────────────────────────────────────
     if prefs.is_abstract_mode_enabled():
         for path, entries in context.state.metadata.items():
-            if not entries:
+            kept = _apply_rollup(entries, path)
+            if not kept:
                 continue
-            summary = "\n".join(
-                f"{entry.type} {entry.name} ({entry.location})" for entry in entries
-            )
-            messages.append(f"# metadata: {path} ({len(entries)} items)\n{summary}")
 
-        logger.info(
-            f" Injected metadata for {len(context.state.metadata)} files."
-        )
+            # 1️⃣ locate header irrespective of ordering
+            header = next((e for e in kept if e.type == "file_header"), kept[0])
+            header_line = _render(header)
+
+            # 2️⃣ body – every entry that is *not* the header
+            body_lines = "\n".join(
+                _render(e) for e in kept if e is not header and e.type != "file_header"
+            )
+
+            out.append(f"# metadata: {header_line}\n{body_lines}")
+
+        logger.info(f"Injected metadata for {len(context.state.metadata)} files.")
+
+    # ── raw-mode injection ────────────────────────────────────────────
     else:
-        seen = set()
+        seen: set[str] = set()
         for f in context.state.files:
-            if f.path not in seen:
-                seen.add(f.path)
-                content = "\n".join(f.lines)
-                messages.append(f"# file: {f.path} ({len(f.lines)} lines)\n{content}")
-        logger.info(f" Injected raw file content for {len(seen)} files.")
+            if f.path in seen:  # de-dup symlinks
+                continue
+            seen.add(f.path)
+            body = "\n".join(f.lines)
+            out.append(f"# file: {f.path} ({len(f.lines)} lines)\n{body}")
 
-    # Always append full content for extra_files (even in abstract mode)
-    seen_extra = set()
+        logger.info(f"Injected raw file content for {len(seen)} files.")
+
+    # ── extra files (always raw) ───────────────────────────────────────
+    extra_count = 0
+    already = {f.path for f in context.state.files}
     for ef in context.state.extra_files:
-        if ef.path not in seen_extra:
-            seen_extra.add(ef.path)
-            content = "\n".join(ef.lines)
-            messages.append(f"# file: {ef.path} ({len(ef.lines)} lines)\n{content}")
+        if ef.path in already:
+            continue
+        out.append(f"# file: {ef.path} ({len(ef.lines)} lines)\n{'\n'.join(ef.lines)}")
+        extra_count += 1
 
-    return messages
+    if extra_count:
+        logger.info(f"Injected {extra_count} extra file(s).")
 
-
-def get_git_diff_stats():
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--numstat"], capture_output=True, text=True, check=True
-        )
-        stats = {}
-        for line in result.stdout.strip().splitlines():
-            added, removed, path = line.split("\t")
-            stats[path] = {"added": int(added), "removed": int(removed)}
-        return stats
-    except Exception:
-        return {}
-
-
-def extract_ast_info(filepath: str) -> dict:
-    source = Path(filepath).read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=filepath)
-    lines = source.splitlines()
-
-    entries: List[ASTEntry] = []
-    imports = []
-
-    def visit_node(node: ast.AST, parent: str = None):
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            location = (
-                f"{filepath}:{node.lineno}–{getattr(node, 'end_lineno', node.lineno)}"
-            )
-            summary = ast.get_docstring(node) or ""
-            code = "\n".join(
-                lines[node.lineno - 1 : getattr(node, "end_lineno", node.lineno)]
-            )
-            entries.append(
-                ASTEntry(
-                    name=node.name,
-                    type=(
-                        "async_function"
-                        if isinstance(node, ast.AsyncFunctionDef)
-                        else "function"
-                    ),
-                    location=location,
-                    summary=summary,
-                    code=code,
-                    metadata={},
-                )
-            )
-        elif isinstance(node, ast.ClassDef):
-            location = (
-                f"{filepath}:{node.lineno}–{getattr(node, 'end_lineno', node.lineno)}"
-            )
-            summary = ast.get_docstring(node) or ""
-            code = "\n".join(
-                lines[node.lineno - 1 : getattr(node, "end_lineno", node.lineno)]
-            )
-            entries.append(
-                ASTEntry(
-                    name=node.name,
-                    type="class",
-                    location=location,
-                    summary=summary,
-                    code=code,
-                    metadata={},
-                )
-            )
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                imports.append(
-                    f"import {alias.name}"
-                    + (f" as {alias.asname}" if alias.asname else "")
-                )
-        elif isinstance(node, ast.ImportFrom):
-            module = node.module or ""
-            level = "." * node.level
-            names = ", ".join(alias.name for alias in node.names)
-            imports.append(f"from {level}{module} import {names}")
-
-        for child in ast.iter_child_nodes(node):
-            visit_node(child, parent=node.name if hasattr(node, "name") else parent)
-
-    visit_node(tree)
-
-    return {
-        "file": str(Path(filepath).resolve().relative_to(get_project_root())),
-        "summary": {
-            "lines": len(lines),
-            "total_definitions": len(entries),
-            "imports": imports,
-        },
-        "entries": entries,
-    }
+    return out
 
 
 def safe_add_extra_context_file(path_str, force=False):
@@ -251,3 +244,17 @@ def safe_remove_extra_context_file(path_str):
     except Exception as e:
         print_error(f"Failed to remove {path_for_context}: {e}")
     return False
+
+
+def get_git_diff_stats():
+    try:
+        out = subprocess.run(
+            ["git", "diff", "--numstat"], capture_output=True, text=True, check=True
+        ).stdout
+        stats = {}
+        for line in out.strip().splitlines():
+            added, removed, p = line.split("\t")
+            stats[p] = {"added": int(added), "removed": int(removed)}
+        return stats
+    except Exception:
+        return {}

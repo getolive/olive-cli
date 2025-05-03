@@ -25,9 +25,26 @@ dependencies = [
 
     # --- File‑system notifications ---
     "watchdog>=6",
+
+    # --- Tree sitter ---
+    "tree-sitter >= 0.20,<0.22",
 ]
 
 requires-python = ">=3.11"
+
+
+# ---------------------------------------------------------------------------
+# Entrypoints
+# ---------------------------------------------------------------------------
+[project.scripts]
+olive = "olive.cli:app"
+
+[tool.setuptools]
+packages = { find = { include = ["olive*"] } }
+include-package-data = true
+
+[tool.setuptools.package-data]
+"olive" = ["**/*", "!**/*.py"]
 
 # ---------------------------------------------------------------------------
 # Optional extras
@@ -46,15 +63,20 @@ dev = [
     "httpx>=0.27",
 ]
 
-# ---------------------------------------------------------------------------
-# Entrypoints
-# ---------------------------------------------------------------------------
-[project.scripts]
-olive = "olive.cli:app"
+# Syntax-aware parsing for multi-language projects
+# NOTE: Wheels for these grammars may lag behind cutting-edge Python ABIs.
+# pip will automatically fall back to building from source (needs a C compiler).
+syntax = [
+    "tree_sitter_javascript>=0.23,<1",
+    "tree_sitter_typescript>=0.23,<1",
+    "tree_sitter_css>=0.23,<1",
+    "tree_sitter_html>=0.23,<1",
+    "tree_sitter_c>=0.23,<1",
+    "tree_sitter_cpp>=0.23,<1",
+    "tree_sitter_rust>=0.23,<1",
+    "tree_sitter_go>=0.23,<1",
 
-[tool.setuptools]
-packages = { find = { include = ["olive*"] } }
-include-package-data = true
-
-[tool.setuptools.package-data]
-"olive" = ["**/*", "!**/*.py"]
+    # grammars still in the 0.2-0.4 range
+    "tree_sitter_lua<1",
+    "tree_sitter_commonlisp<1",
+]

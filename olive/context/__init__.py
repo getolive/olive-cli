@@ -2,12 +2,16 @@
 
 import fnmatch
 import os
-from concurrent.futures import ThreadPoolExecutor
+import mmap
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Union
+from typing import Union, List, Dict
+
+# triggers roll-up side-effect registration - intentionally unused.
+from olive.context import rollups #noqa: F401 # pylint: disable=unused-import
 
 from olive.context.models import ASTEntry, ChatMessage, Context, ContextFile
-from olive.context.utils import extract_ast_info
+from olive.context.trees import extract_ast_info
 from olive.env import get_project_root
 from olive.gitignore import is_ignored_by_git
 from olive.logger import get_logger
@@ -78,7 +82,7 @@ class OliveContext:
     def inject_system_message(self, content: Union[str, dict]):
         return injection.append_system_prompt_injection(content)
 
-    def add_extra_file(self, path: str, lines: list):
+    def add_extra_file(self, path: str, lines: List):
         """Add a file (by path) to extra_files."""
         norm_path = self._normalize_path(path)
         if any(
@@ -102,10 +106,10 @@ class OliveContext:
     def _normalize_path(path: str) -> str:
         return str(Path(path).expanduser().resolve())
 
-    def add_metadata(self, path: str, entries: list[ASTEntry]):
+    def add_metadata(self, path: str, entries: List[ASTEntry]):
         self.state.metadata[path] = entries
 
-    def add_imports(self, path: str, imports: list[str]):
+    def add_imports(self, path: str, imports: List[str]):
         self.state.imports[path] = imports
 
     def hydrate(self):
@@ -124,20 +128,10 @@ class OliveContext:
         payload = self._build_context_payload()
         self.state.files = payload
 
-        # 4. Hydrate AST metadata (if abstract mode enabled)
-        # todo..
-        if prefs.is_abstract_mode_enabled():
-            for f in payload:
-                path = f.path
-                try:
-                    ast_info = extract_ast_info(path)
-                    self.state.metadata[path] = ast_info["entries"]
-                    self.state.imports[path] = ast_info["summary"].get("imports", [])
-                except Exception as e:
-                    logger.warning(f"Failed to parse AST for {path}: {e}")
-        else:
-            self.state.metadata = {}
-            self.state.imports = {}
+        # 4. Clear AST metadata (if abstract mode disabled)
+        if not prefs.is_abstract_mode_enabled():
+            self.state.metadata.clear()
+            self.state.imports.clear()
 
         # 5. Summary log
         logger.info(
@@ -148,7 +142,7 @@ class OliveContext:
             f"{len(self.state.imports)} import summaries"
         )
 
-    def _build_context_payload(self) -> list[ContextFile]:
+    def _build_context_payload(self) -> List[ContextFile]:
         """
         Build a list of ContextFile objects by reading discovered files.
 
@@ -157,22 +151,65 @@ class OliveContext:
         - Reads up to N lines from each file
         - Skips unreadable files with a warning
         """
-        files = self._discover_files()
-        max_lines = prefs.get("context", "max_lines_per_file", default=200)
-        payload = []
+        root          = get_project_root()
+        files         = self._discover_files()
+        max_lines     = prefs.get("context", "max_lines_per_file", default=200)
+        abstract_mode = prefs.is_abstract_mode_enabled()
+
+        payload:   List[ContextFile] = []
+        metadata:  Dict[str, List[ASTEntry]] = {}
+        imports:   Dict[str, List[str]] = {}
 
         def process(f: Path):
+            # ─── Skip obvious binaries (null byte in first 1 KiB) ──────────────────
             try:
-                lines = f.read_text(errors="ignore").splitlines()
-                return ContextFile(path=str(f), lines=lines[:max_lines])
+                size = f.stat().st_size
+                if size:  # mmap needs non-zero length
+                    with f.open("rb") as fh, \
+                         mmap.mmap(fh.fileno(), min(1024, size), access=mmap.ACCESS_READ) as mm:
+                        if b"\x00" in mm:
+                            return None          # likely binary; ignore
+            except (OSError, ValueError) as e:
+                logger.debug(f"Binary sniff failed for {f}: {e}")
+
+            # relative path preferred
+            try:
+                rel = f.relative_to(root)
+                path_str = str(rel)
+            except ValueError:
+                path_str = str(f)
+
+            try:
+                text  = f.read_text(errors="ignore")
+                lines = text.splitlines()
+                cf    = ContextFile(path=path_str, lines=lines[:max_lines])
+
+                if abstract_mode:
+                    ast_info = extract_ast_info(f)
+                    return cf, path_str, ast_info["entries"], ast_info["summary"].get("imports", [])
+                else:
+                    return cf, None, None, None
+
             except Exception as e:
-                logger.warning(f"Failed to read file {f}: {e}")
+                logger.warning(f"Failed to read/parse {f}: {e}")
                 return None
 
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
-            for result in pool.map(process, files):
-                if result:
-                    payload.append(result)
+        workers = min(32, os.cpu_count() or 4)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [pool.submit(process, p) for p in files]
+            for fut in as_completed(futures):
+                res = fut.result()
+                if not res:
+                    continue
+                cf, m_key, m_entries, m_imports = res
+                payload.append(cf)
+                if m_key:
+                    metadata[m_key] = m_entries
+                    imports[m_key]  = m_imports
+
+        # push results into state so caller doesn’t need a second pass
+        self.state.metadata.update(metadata)
+        self.state.imports.update(imports)
 
         return payload
 
@@ -190,7 +227,7 @@ class OliveContext:
             or (respect_gitignore and is_ignored_by_git(rel_str))
         )
 
-    def _discover_files(self, inclue_extra_files=True) -> list[Path]:
+    def _discover_files(self, inclue_extra_files=True) -> List[Path]:
         """
         Discover project source files to include in the Olive context.
 
@@ -199,7 +236,7 @@ class OliveContext:
         (depending on preferences). All returned paths are relative to the project root.
 
         Returns:
-            list[Path]: A list of relative file paths to include in the context,
+            List[Path]: A list of relative file paths to include in the context,
                         ordered deterministically and capped by max_files if set.
 
         Respects the following preferences:

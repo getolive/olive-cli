@@ -1,7 +1,7 @@
 # cli/olive/context/models.py
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ContextFile(BaseModel):
@@ -16,11 +16,12 @@ class ASTEntry(BaseModel):
     """
 
     name: str
-    type: Literal["class", "function", "async_function"]
+    type: str
     location: str  # e.g., "path/to/file.py:12–34"
     summary: Optional[str] = None  # Short natural language description or docstring
     code: Optional[str] = None  # Snippet of the raw source
-    metadata: Dict[str, Optional[List[str]]] = {}  # decorators, calls, returns, etc
+    # allow arbitrary JSON-serialisable metadata; safe default factory; decorators, calls, returns, etc.
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ChatMessage(BaseModel):

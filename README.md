@@ -2,8 +2,11 @@
 
 ![Status](https://img.shields.io/badge/status-pre--v1,_experimental-orange)
 ```bash
-# install
+# install (minimal)
 uv pip install "git+https://github.com/getolive/olive-cli.git"
+
+# install (reccomended, PEP508 with all optionals included)
+uv pip install "olive-cli[dev,http,syntax] @ git+https://github.com/getolive/olive-cli.git"
 
 # dependencies:
 # POSIX host, docker (if using sandbox support), astral's uv, python >3.11
