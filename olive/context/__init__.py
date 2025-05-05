@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Union, List, Dict
 
 # triggers roll-up side-effect registration - intentionally unused.
-from olive.context import rollups #noqa: F401 # pylint: disable=unused-import
+from olive.context import rollups  # noqa: F401 # pylint: disable=unused-import
 
 from olive.context.models import ASTEntry, ChatMessage, Context, ContextFile
 from olive.context.trees import extract_ast_info
@@ -151,24 +151,28 @@ class OliveContext:
         - Reads up to N lines from each file
         - Skips unreadable files with a warning
         """
-        root          = get_project_root()
-        files         = self._discover_files()
-        max_lines     = prefs.get("context", "max_lines_per_file", default=200)
+        root = get_project_root()
+        files = self._discover_files()
+        max_lines = prefs.get("context", "max_lines_per_file", default=200)
         abstract_mode = prefs.is_abstract_mode_enabled()
 
-        payload:   List[ContextFile] = []
-        metadata:  Dict[str, List[ASTEntry]] = {}
-        imports:   Dict[str, List[str]] = {}
+        payload: List[ContextFile] = []
+        metadata: Dict[str, List[ASTEntry]] = {}
+        imports: Dict[str, List[str]] = {}
 
         def process(f: Path):
             # ─── Skip obvious binaries (null byte in first 1 KiB) ──────────────────
             try:
                 size = f.stat().st_size
                 if size:  # mmap needs non-zero length
-                    with f.open("rb") as fh, \
-                         mmap.mmap(fh.fileno(), min(1024, size), access=mmap.ACCESS_READ) as mm:
+                    with (
+                        f.open("rb") as fh,
+                        mmap.mmap(
+                            fh.fileno(), min(1024, size), access=mmap.ACCESS_READ
+                        ) as mm,
+                    ):
                         if b"\x00" in mm:
-                            return None          # likely binary; ignore
+                            return None  # likely binary; ignore
             except (OSError, ValueError) as e:
                 logger.debug(f"Binary sniff failed for {f}: {e}")
 
@@ -180,13 +184,18 @@ class OliveContext:
                 path_str = str(f)
 
             try:
-                text  = f.read_text(errors="ignore")
+                text = f.read_text(errors="ignore")
                 lines = text.splitlines()
-                cf    = ContextFile(path=path_str, lines=lines[:max_lines])
+                cf = ContextFile(path=path_str, lines=lines[:max_lines])
 
                 if abstract_mode:
                     ast_info = extract_ast_info(f)
-                    return cf, path_str, ast_info["entries"], ast_info["summary"].get("imports", [])
+                    return (
+                        cf,
+                        path_str,
+                        ast_info["entries"],
+                        ast_info["summary"].get("imports", []),
+                    )
                 else:
                     return cf, None, None, None
 
@@ -205,7 +214,7 @@ class OliveContext:
                 payload.append(cf)
                 if m_key:
                     metadata[m_key] = m_entries
-                    imports[m_key]  = m_imports
+                    imports[m_key] = m_imports
 
         # push results into state so caller doesn’t need a second pass
         self.state.metadata.update(metadata)
@@ -214,18 +223,27 @@ class OliveContext:
         return payload
 
     def is_file_excluded(self, rel) -> bool:
-        """
-        A simple helper to confirm whether the path (rel) is allowed by preferences.
-        """
         exclude_patterns = prefs.get("context", "exclude", "patterns", default=[])
         exclude_paths = set(prefs.get("context", "exclude", "paths", default=[]))
         respect_gitignore = prefs.get("context", "respect_gitignore", default=True)
         rel_str = str(rel)
-        return (
-            any(fnmatch.fnmatch(rel_str, pat) for pat in exclude_patterns)
-            or rel_str in exclude_paths
-            or (respect_gitignore and is_ignored_by_git(rel_str))
-        )
+        rel_parts = Path(rel_str).parts
+        # DEBUG: print the paths checked
+        logger.debug(f"[DEBUG] is_file_excluded: rel={rel}, rel_str={rel_str}, rel_parts={rel_parts}")
+        if "vendor" in rel_parts:
+            logger.debug(f"[DEBUG] Excluding {rel_str} due to vendor in path parts")
+            return True
+        if any(fnmatch.fnmatch(rel_str, pat) for pat in exclude_patterns):
+            logger.debug(f"[DEBUG] Excluding {rel_str} due to pattern match")
+            return True
+        if rel_str in exclude_paths:
+            logger.debug(f"[DEBUG] Excluding {rel_str} due to exact path")
+            return True
+        if respect_gitignore and is_ignored_by_git(rel_str):
+            logger.debug(f"[DEBUG] Excluding {rel_str} due to gitignore")
+            return True
+        return False
+
 
     def _discover_files(self, inclue_extra_files=True) -> List[Path]:
         """
