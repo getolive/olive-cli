@@ -155,7 +155,51 @@ class OliveCompleter(Completer):
 # ─── Key Bindings ──────────────────────────────────────────────────
 
 bindings = KeyBindings()
+import time
+from prompt_toolkit.application import get_app
+from prompt_toolkit.formatted_text import ANSI
 
+_last_ctrl_c_time = [0]
+_ctrlc_hint_active = [False]
+
+@bindings.add('c-c')
+@bindings.add('c-c')
+@bindings.add('c-c')
+def handle_ctrl_c(event):
+    """
+    Double Ctrl+C to exit. Single Ctrl+C clears buffer (if not empty) or prompts to double-tap.
+    """
+    try:
+        now = time.time()
+        buf = event.app.current_buffer
+        app = event.app
+        logger.debug(f"[handle_ctrl_c] called: now={now}, last={_last_ctrl_c_time[0]}, buf.text={repr(buf.text)}")
+
+        if buf.text:
+            buf.reset()
+            try:
+                app.layout.reset()
+            except Exception:
+                pass
+            app.invalidate()
+            if hasattr(app, "_redraw"):
+                try:
+                    app._redraw()
+                except Exception:
+                    pass
+            print('\x1b[2m[Olive] Cleared prompt input. (Press Ctrl+C again quickly to exit.)\x1b[0m')
+            _last_ctrl_c_time[0] = 0
+            _ctrlc_hint_active[0] = True
+        elif now - _last_ctrl_c_time[0] < 1.0:
+            logger.debug(f"[handle_ctrl_c] double Ctrl+C detected: now={now}, last={_last_ctrl_c_time[0]}")
+            print("[Olive] Exiting on double Ctrl+C.")
+            from olive.shell.admin import perform_graceful_exit
+            perform_graceful_exit()
+            _last_ctrl_c_time[0] = now
+            _ctrlc_hint_active[0] = True
+    except Exception as e:
+        logger.exception("Exception in handle_ctrl_c: %s", e)
+        print_error("Unexpected error during Ctrl+C handling. Shell remains alive.")
 
 # Use Ctrl+Enter (ctrl-j) to insert a newline:
 @bindings.add("c-j")

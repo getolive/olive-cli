@@ -1,44 +1,23 @@
-# olive/shell/__init__.py
-
+import asyncio
 import subprocess
-
-# ensure all admin commands get registered
-import olive.shell.admin  # noqa: F401
-from olive.daemon import process_manager
-from olive.init import initialize_shell_session
+from olive.shell import admin as shell_admin
+from olive.tasks import admin as tasks_admin
+from olive.sandbox import admin as sandbox_admin
+from olive.canonicals import admin as canonicals_admin
+import olive.tools.admin  # ensure toolkit/tool management commands are registered
+from olive.ui import print_info, print_error
+from olive.prompt_ui import session, olive_prompt, register_commands, get_management_commands
 from olive.logger import get_logger
-from olive.prompt_ui import olive_prompt, session
+from olive.daemon import process_manager
 from olive.shell.dispatchers import dispatch
-from olive.ui import print_error, print_info
+from olive.init import initialize_shell_session
 
-logger = get_logger("shell")
+logger = get_logger(__name__)
 
+logger = get_logger(__name__)
+from olive.init import initialize_shell_session
 
-async def handle_shell_input(user_input: str, interactive: bool = True):
-    """
-    Top‑level entry for each line of input.
-    Strips and ignores empty input, then hands off to the dispatcher.
-    """
-    text = user_input.strip()
-    if not text:
-        return
-    return await dispatch(text, interactive)
-
-
-async def run_interactive_shell():
-    """
-    The main loop: initialize, then repeatedly prompt & dispatch.
-    """
-    initialize_shell_session()
-    while True:
-        try:
-            user_input = await session.prompt_async(olive_prompt)
-            await handle_shell_input(user_input, interactive=True)
-        except (KeyboardInterrupt, EOFError):
-            print_info("\nExiting Olive Shell.")
-            logger.info("Shell exited by user.")
-            break
-
+logger = get_logger(__name__)
 
 async def run_shell_command(command: str):
     """
@@ -61,7 +40,16 @@ async def run_shell_command(command: str):
 
     elif len(alive) > 1:
         print_error("❌ Multiple daemons detected. Specify with --daemon-id.")
+        return await dispatch(command, interactive=False)
 
-    else:
-        print_info("⚙️ No daemon found; running locally…")
-        return await handle_shell_input(command, interactive=False)
+async def run_interactive_shell():
+    initialize_shell_session()
+    register_commands(get_management_commands())
+    while True:
+        try:
+            user_input = await session.prompt_async(olive_prompt)
+            await dispatch(user_input, interactive=True)
+        except (KeyboardInterrupt, EOFError):
+            print_info("\nExiting Olive Shell.")
+            logger.info("Shell exited by user.")
+            break

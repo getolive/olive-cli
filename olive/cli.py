@@ -7,14 +7,15 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
-
+from olive.canonicals import CanonicalRegistry
+from olive.tools import ToolRegistry
 import typer
 
 from olive import env
 from olive.context import context
 from olive.daemon import process_manager
 from olive.init import initialize_olive, validate_olive
-from olive.shell import run_interactive_shell, run_shell_command
+from olive.shell import run_shell_command, run_interactive_shell
 from olive.tasks.runner import run_task_from_file
 from olive.tools.admin import tools_summary_command
 
@@ -45,89 +46,40 @@ def init():
 
 
 @app.command()
-def shell(
-    command: str = typer.Option(
-        None, "-c", help="Run a single Olive shell command and exit."
-    ),
-):
-    """
-    Start the Olive shell interactively or execute a one-off command via `-c`.
+@app.command()
+def shell():
+    """Start the Olive shell interactively or execute a one-off command via `-c`."""
+    import sys
+    from olive.logger import get_logger
+    from olive.prompt_ui import register_commands
+    from olive.preferences.admin import get_prefs_lazy
+    from olive.sandbox import SandboxManager
+    from olive.shell import run_interactive_shell
+    from olive.canonicals import CanonicalRegistry
+    from olive.tools import ToolRegistry
 
-    Supports background daemon mode (via `--daemon`) or runs the command immediately.
-    """
-    initialize_olive()
+    logger = get_logger()
+    prefs = get_prefs_lazy()
 
-    if command:
+    Canonicals = CanonicalRegistry()
+    Canonicals.discover_all(install=True)
+    from olive.tools import tool_registry
+    tool_registry.discover_all(install=True)
+
+    try:
         import asyncio
-
-        result = asyncio.run(run_shell_command(command))
-        if result:
-            print(result)
-        raise typer.Exit()
-
-    if global_flags["daemon"]:
-        # 1) re‑use existing alive shell
-        alive = next(
-            (
-                p
-                for p in process_manager.list().values()
-                if p.kind == "shell" and p.is_alive()
-            ),
-            None,
-        )
-        if alive:
-            sbx_dir = env.get_sandbox_root()
-            info = {
-                "id": alive.daemon_id,
-                "sbx_dir": str(sbx_dir),
-                "rpc_dir": str(sbx_dir / "rpc"),
-                "result_dir": str(sbx_dir / "result"),
-            }
-            typer.echo(json.dumps(info))
-            raise typer.Exit()
-
-        # 2) spawn fresh daemon
-        sid = uuid.uuid4().hex[:8]
-        sbx_dir = Path(".olive/run/sbx") / sid
-        (sbx_dir / "rpc").mkdir(parents=True, exist_ok=True)
-        (sbx_dir / "result" / "logs").mkdir(parents=True, exist_ok=True)
-
-        os.environ["OLIVE_SESSION_ID"] = sid
-        os.environ["OLIVE_SANDBOX_DIR"] = str(sbx_dir)
-
-        cmd = [
-            "env",
-            f"OLIVE_SESSION_ID={sid}",
-            f"OLIVE_SANDBOX_DIR={sbx_dir}",
-            sys.executable,
-            "-m",
-            "olive",
-            "shell",
-        ]
-
-        proc = process_manager.spawn(daemon_id=sid, cmd=cmd, kind="shell")
-
-        if not proc:
-            typer.echo("Failed to start daemon")
-            raise typer.Exit(1)
-
-        info = {
-            "id": sid,
-            "sbx_dir": str(sbx_dir),
-            "rpc_dir": str(sbx_dir / "rpc"),
-            "result_dir": str(sbx_dir / "result"),
-            "export": f"export OLIVE_SESSION_ID={sid} "
-            f"OLIVE_SANDBOX_DIR='{sbx_dir.resolve()}'",
-        }
-        typer.echo(json.dumps(info))
-        raise typer.Exit()
-    else:
-        import asyncio
-
         asyncio.run(run_interactive_shell())
-
-
-@app.command("context")
+    except KeyboardInterrupt:
+        print('\n[Olive] Exiting shell (KeyboardInterrupt).')
+        # Clean up: stop sandbox if running, flush logs, exit gracefully
+        try:
+            if prefs.is_sandbox_enabled():
+                sbx = SandboxManager()
+                if sbx.is_running():
+                    sbx.stop()
+        except Exception as e:
+            logger.warning(f"[Olive] Exception during sandbox cleanup: {e}")
+        sys.exit(0)
 def context_command():
     """Show the current active context files and tail of active.json."""
     from olive.context.admin import show_context_summary

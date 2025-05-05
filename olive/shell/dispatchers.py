@@ -11,7 +11,9 @@ from olive.logger import get_logger
 from olive.prompt_ui import get_management_commands
 from olive.tasks import task_manager
 from olive.tools import tool_registry
+from olive.sandbox import sandbox
 
+from olive.preferences.admin import get_prefs_lazy
 from olive.ui import console, print_error, print_success, print_warning
 
 from .utils import _render_tool_result
@@ -22,31 +24,25 @@ COMMANDS = get_management_commands()
 
 
 async def dispatch(user_input: str, interactive: bool):
-    """
-    Route input based on its prefix:
-      :   management command
-      !!  async tool call
-      !   shell exec
-      else → LLM fallback
-    """
-    user_input = user_input.strip()
-    if not user_input:
-        return
-
-    if user_input.startswith(":"):
+    """Route input based on its prefix: management, tool, shell, or fallback to LLM."""
+    # Management commands (e.g., :exit, :prefs, :tools) are always handled first
+    if user_input.strip().startswith(':'):
         return await _dispatch_management(user_input, interactive)
-
-    if user_input.startswith("!!"):
+    if user_input.strip().startswith('!!'):
         return await _dispatch_tool_call(user_input, interactive)
+    if user_input.strip().startswith('!'):
+        return _dispatch_shell_exec(user_input[1:].strip())
+    if user_input.strip().startswith('@'):
+        return _dispatch_atcommand(user_input)
+    # Sandbox guard: block commands if sandbox is required but not running
 
-    if user_input.startswith("!"):
-        _dispatch_shell_exec(user_input[1:])
+    prefs = get_prefs_lazy()
+    if prefs.is_sandbox_enabled() and not sandbox.is_running():
+        from olive.ui import print_warning
+        print_warning("Sandbox is enabled in preferences, but is not running. Command not dispatched. Use :sandbox-start to start it.")
         return
 
-    if user_input.startswith("@"):
-        _dispatch_atcommand(user_input[1:])
-        return
-
+    # All other input: LLM fallback
     return await _dispatch_llm(user_input, interactive)
 
 
@@ -70,7 +66,10 @@ async def _dispatch_management(user_input: str, interactive: bool):
                 result = await (fn(args) if args else fn())
             else:
                 result = fn(args) if args else fn()
-            if not interactive:
+            if interactive:
+                if result is not None:
+                    print(result)
+            else:
                 return result
         except Exception as e:
             logger.exception(f"Command error: {cmd_name}")

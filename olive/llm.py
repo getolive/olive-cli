@@ -16,7 +16,7 @@ from openai import OpenAI
 import openai
 import asyncio
 from olive.ui import console
-
+from olive.session import _INTERRUPTED
 
 from olive.context import context
 from olive.logger import get_logger
@@ -154,7 +154,7 @@ class LLMProvider:
 
         if _depth >= _max_depth:
             logger.warning("Max LLM recursion depth reached; aborting.")
-            return "[Aborted: too many tool cycles]"
+            return "[Aborted: too many tool cycles. You can continue by just asking olive to please continue. This is a failsafe.]"
 
         # ── Helper: classify recoverable errors ──────────────────────────
         def _is_recoverable(err: Exception) -> bool:
@@ -229,6 +229,10 @@ class LLMProvider:
             return reply  # tools produced nothing useful
 
         # ── 4. Recurse once with tool outputs ───────────────────────────
+        # ── 4. Recurse once with tool outputs ───────────────────────────
+        if _INTERRUPTED.is_set():
+            print("[Olive] Recursion paused by user (Ctrl+C). Type ':resume' to continue.")
+            return "[Paused: Ctrl+C interrupt]"
         followup = "\n\n".join(map(str, outputs))
         return await self.ask(
             followup,

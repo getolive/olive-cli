@@ -1,4 +1,4 @@
-# olive/shell/admin.py
+from olive.session import _INTERRUPTED
 
 import json
 import subprocess
@@ -40,10 +40,17 @@ def print_project_root():
 
 
 @olive_management_command(":exit")
+def perform_graceful_exit():
+    """Perform all Olive shell cleanup and exit the process."""
+    logger.info("User exited Olive Shell.")
+    # Place for future cleanup hooks, flushes, etc.
+    import sys
+    sys.exit(0)
+
+@olive_management_command(":exit")
 def exit_command():
     """Exit the Olive shell."""
-    logger.info("User exited Olive Shell.")
-    sys.exit(0)
+    perform_graceful_exit()
 
 
 @olive_management_command(":help")
@@ -147,5 +154,13 @@ def profile_command():
     table.add_column("Time (ms)", justify="right")
     for label, duration in steps:
         table.add_row(label, f"{duration * 1000:.2f}")
-
     console.print(table)
+
+@olive_management_command(":resume")
+def resume_command():
+    """Resume paused agent/autonomous work after Ctrl+C."""
+    if _INTERRUPTED.is_set():
+        _INTERRUPTED.clear()
+        print("[Olive] Resuming agent recursion after interrupt.")
+    else:
+        print("[Olive] Nothing to resume; agent not paused.")

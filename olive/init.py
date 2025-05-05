@@ -15,6 +15,7 @@ from olive.preferences.admin import get_prefs_lazy, prefs_show_summary
 from olive.tools import tool_registry
 from olive.tools.admin import tools_summary_command
 from olive.ui import console, print_info, print_error, print_success, print_warning
+from rich.tree import Tree
 
 logger = get_logger(__name__)
 
@@ -115,8 +116,21 @@ def initialize_shell_session():
 
     prefs_show_summary()
 
+    tools = tool_registry.list()
+    n_tools = len(tools)
+    parent_label = f"Olive has access to {n_tools} tool{'s' if n_tools != 1 else ''}"
+    tool_tree = Tree(parent_label, guide_style="bold cyan")
+
+    for entry in tools:
+        tool_name = f"[bold]{entry.tool.name}[/bold]"
+        desc = (entry.tool.description or "").splitlines()[0]
+        if len(desc) > 80:
+            desc = desc[:80] + " [...]"
+        tool_tree.add(f"{tool_name}: {desc}")
+
+    console.print(tool_tree)
     if env.is_git_dirty():
-        print_warning("Git repo is dirty — uncommitted changes detected\n")
+        print_info("\nFYI: your git repo is dirty (uncommitted changes detected, you can run !git diff from shell to review))\n")
 
     prefs = get_prefs_lazy()
     start_sandbox_if_enabled(prefs)
