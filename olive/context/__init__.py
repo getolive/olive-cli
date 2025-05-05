@@ -80,7 +80,7 @@ class OliveContext:
         self.state.chat.append(ChatMessage(role=role, content=content))
 
     def inject_system_message(self, content: Union[str, dict]):
-        return injection.append_system_prompt_injection(content)
+        return injection.append_context_injection(content)
 
     def add_extra_file(self, path: str, lines: List):
         """Add a file (by path) to extra_files."""

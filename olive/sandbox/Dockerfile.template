@@ -38,11 +38,10 @@ COPY {{ olive_source_path }} /olive
 
 
 # Install Olive into a venv at root
-RUN uv venv && uv pip install -e .
+RUN uv venv && uv pip install -e ".[dev,http,syntax]"
 
 # ─────────────────────────────────────────────────────────────
-# Runtime stage
-# ─────────────────────────────────────────────────────────────
+# Runtime stage ─────────────────────────────────────────────────────────────
 
 FROM python:3.13-slim
 

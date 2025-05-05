@@ -188,15 +188,20 @@ def handle_ctrl_c(event):
                 except Exception:
                     pass
             print('\x1b[2m[Olive] Cleared prompt input. (Press Ctrl+C again quickly to exit.)\x1b[0m')
-            _last_ctrl_c_time[0] = 0
-            _ctrlc_hint_active[0] = True
-        elif now - _last_ctrl_c_time[0] < 1.0:
-            logger.debug(f"[handle_ctrl_c] double Ctrl+C detected: now={now}, last={_last_ctrl_c_time[0]}")
-            print("[Olive] Exiting on double Ctrl+C.")
-            from olive.shell.admin import perform_graceful_exit
-            perform_graceful_exit()
             _last_ctrl_c_time[0] = now
             _ctrlc_hint_active[0] = True
+        else:
+            if now - _last_ctrl_c_time[0] < 1.0:
+                logger.debug(f"[handle_ctrl_c] double Ctrl+C detected: now={now}, last={_last_ctrl_c_time[0]}")
+                print("[Olive] Exiting on double Ctrl+C.")
+                from olive.shell.admin import perform_graceful_exit
+                perform_graceful_exit()
+                _last_ctrl_c_time[0] = now
+                _ctrlc_hint_active[0] = True
+            else:
+                print('\x1b[2m[Olive] (Double Ctrl+C to exit) No input to clear.\x1b[0m')
+                _last_ctrl_c_time[0] = now
+                _ctrlc_hint_active[0] = True
     except Exception as e:
         logger.exception("Exception in handle_ctrl_c: %s", e)
         print_error("Unexpected error during Ctrl+C handling. Shell remains alive.")

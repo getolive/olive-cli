@@ -1,4 +1,5 @@
-# cli/olive/context/utils.py
+from olive.context import OliveContext
+context = OliveContext()
 
 import subprocess
 from pathlib import Path
