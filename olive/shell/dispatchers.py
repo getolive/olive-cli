@@ -25,6 +25,8 @@ COMMANDS = get_management_commands()
 
 async def dispatch(user_input: str, interactive: bool):
     """Route input based on its prefix: management, tool, shell, or fallback to LLM."""
+    if not user_input.strip():
+        return
     # Management commands (e.g., :exit, :prefs, :tools) are always handled first
     if user_input.strip().startswith(':'):
         return await _dispatch_management(user_input, interactive)
@@ -181,6 +183,8 @@ def _dispatch_atcommand(user_input: str):
             tokens = tokens[:-1]
 
     path = " ".join(tokens)
+    if path.startswith("@"):
+        path = path[1:]
     if remove:
         safe_remove_extra_context_file(path)
     else:
