@@ -40,17 +40,11 @@ def print_project_root():
 
 
 @olive_management_command(":exit")
-def perform_graceful_exit():
+def perform_graceful_exit(*args, **kwargs):
     """Perform all Olive shell cleanup and exit the process."""
     logger.info("User exited Olive Shell.")
     # Place for future cleanup hooks, flushes, etc.
-    import sys
     sys.exit(0)
-
-@olive_management_command(":exit")
-def exit_command():
-    """Exit the Olive shell."""
-    perform_graceful_exit()
 
 
 @olive_management_command(":help")
@@ -155,6 +149,7 @@ def profile_command():
     for label, duration in steps:
         table.add_row(label, f"{duration * 1000:.2f}")
     console.print(table)
+
 
 @olive_management_command(":resume")
 def resume_command():
