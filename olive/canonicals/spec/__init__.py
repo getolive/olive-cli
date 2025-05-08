@@ -4,6 +4,7 @@ from pathlib import Path
 from olive.logger import get_logger
 
 from . import storage
+from . import admin # noqa
 
 logger = get_logger(__name__)
 

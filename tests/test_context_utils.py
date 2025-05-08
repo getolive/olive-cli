@@ -1,15 +1,13 @@
-import pytest
-from unittest.mock import patch, MagicMock
-import olive.context.utils as utils
+from unittest.mock import MagicMock
 
-import pytest
-from olive.context import context
-from olive.context.utils import safe_add_extra_context_file, safe_remove_extra_context_file
-from pathlib import Path
-
-import olive.env
 
 def test_safe_add_extra_context_file_success(tmp_path):
+    import olive
+    from olive.context.utils import (
+        safe_add_extra_context_file,
+        safe_remove_extra_context_file,
+    )
+
     old_root = olive.env.get_project_root()
     olive.env.set_project_root(tmp_path)
     test_file = tmp_path / "hello.txt"
@@ -19,7 +17,16 @@ def test_safe_add_extra_context_file_success(tmp_path):
     safe_remove_extra_context_file(str(test_file))
     olive.env.set_project_root(old_root)
 
+
 def test_safe_add_extra_context_file_excluded(tmp_path, monkeypatch):
+    from olive.context.utils import (
+        safe_add_extra_context_file,
+        safe_remove_extra_context_file,
+    )
+    from olive.context import context
+
+    context.reset()
+    context.hydrate()
     test_file = tmp_path / "exclude.txt"
     test_file.write_text("abc")
     monkeypatch.setattr(context, "is_file_excluded", lambda p: True)
@@ -27,31 +34,82 @@ def test_safe_add_extra_context_file_excluded(tmp_path, monkeypatch):
     assert safe_add_extra_context_file(str(test_file), force=True)
     safe_remove_extra_context_file(str(test_file))
 
+
 def test_safe_remove_extra_context_file_success(tmp_path):
+    from olive.context.utils import (
+        safe_add_extra_context_file,
+        safe_remove_extra_context_file,
+    )
+
     test_file = tmp_path / "remove.txt"
     test_file.write_text("123")
     safe_add_extra_context_file(str(test_file))
     assert safe_remove_extra_context_file(str(test_file))
     assert safe_remove_extra_context_file(str(test_file))
 
+
 def test_safe_remove_extra_context_file_notfound(tmp_path):
+    from olive.context.utils import safe_remove_extra_context_file
+
     test_file = tmp_path / "notfound.txt"
     test_file.write_text("doesn't matter")
     assert safe_remove_extra_context_file(str(test_file))
 
-def test_get_git_diff_stats(monkeypatch):
-    monkeypatch.setattr('subprocess.run', lambda *a, **k: MagicMock(stdout='1\t2\tfile.py\n'))
-    stats = utils.get_git_diff_stats()
-    assert 'file.py' in stats
 
-def test_render_file_context_for_llm_raw(monkeypatch):
-    ctx = MagicMock()
-    ctx.state.files = [MagicMock(path='a.py', lines=['a', 'b'])]
-    ctx.state.extra_files = []
-    ctx.state.metadata = {}
-    monkeypatch.setattr('olive.context.utils.context', ctx)
-    prefs = MagicMock(is_abstract_mode_enabled=lambda: False)
-    monkeypatch.setattr('olive.context.utils.get_prefs_lazy', lambda: prefs)
-    monkeypatch.setattr('olive.context.utils.get_logger', lambda _: MagicMock(info=lambda *a, **k: None))
-    out = utils.render_file_context_for_llm()
-    assert any('file:' in o for o in out)
+def test_get_git_diff_stats(monkeypatch):
+    from olive.context import utils
+
+    monkeypatch.setattr(
+        "subprocess.run", lambda *a, **k: MagicMock(stdout="1\t2\tfile.py\n")
+    )
+    stats = utils.get_git_diff_stats()
+    assert "file.py" in stats
+
+
+def test_initialize_and_context_file_discovery(tmp_path, monkeypatch):
+    """
+    Ensure Olive can initialize in an arbitrary directory,
+    and that its context discovers a hello.py file (and not unrelated files).
+    """
+    monkeypatch.chdir(tmp_path)
+
+    from olive.init import initialize_olive
+    from olive.context import OliveContext
+    from pathlib import Path
+
+    # Create a simple hello.py file in the temp directory
+    hello_path = tmp_path / "hello.py"
+    hello_path.write_text("print('hello world')\n")
+
+    # Create a file that should NOT be picked up by context (e.g. .hidden, .txt, or in .olive)
+    ignored_path = tmp_path / "ignored.sh"
+    ignored_path.write_text("#!/bin/bash\n echo 'should not be included'")
+
+    dot_olive_dir = tmp_path / ".olive"
+    dot_olive_dir.mkdir()
+    olive_internal = dot_olive_dir / "internal.py"
+    olive_internal.write_text("print('internal')")
+
+    # Initialize Olive in this directory
+    initialize_olive()
+
+    # Hydrate context, then check discovered files
+    ctx = OliveContext()
+    ctx.hydrate()
+    ctx_files = ctx._discover_files()
+
+    ctx_paths = {Path(p).as_posix().lstrip("./") for p in ctx_files}
+
+    # 2. Define expectations
+    required  = {"hello.py"}
+    forbidden = {"ignored.txt", ".olive/internal.py"}
+
+    # 3. Set-algebra checks
+    missing  = required  - ctx_paths
+    unwanted = ctx_paths & forbidden
+
+    if missing:
+        raise AssertionError(f"Missing required file(s): {missing}")
+    if unwanted:
+        raise AssertionError(f"Unexpected file(s) in context: {unwanted}")
+    

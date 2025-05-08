@@ -79,6 +79,13 @@ def get_logs_root() -> Path:
     """`<project>/.olive/logs` – persistent logs."""
     return _ensure_dir(get_dot_olive() / "logs")
 
+def get_current_logs_dir() -> Path:
+    """
+    Host  → <project>/.olive/logs
+    Inside sandbox → get_sandbox_logs_dir()
+    """
+    return get_sandbox_logs_dir() if os.getenv("OLIVE_SANDBOX_DIR") else get_logs_root()
+
 
 # ──────────────────────────────────────────────────────────────
 # session‑id helpers  (only daemons / sandbox call generate)

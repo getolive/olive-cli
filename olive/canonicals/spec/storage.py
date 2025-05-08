@@ -21,11 +21,11 @@ def get_all_specs() -> List[FeatureSpec]:
 
         try:
             data = yaml.safe_load(path.read_text())
-            # Validate structure (won't raise if minimal fields exist)
-            FeatureSpec.model_validate(data)  # raises ValidationError if invalid
-            specs.append(FeatureSpec(**data))
+            spec = FeatureSpec.model_validate(data)
+            specs.append(spec)
         except Exception as e:
-            logger.debug(f"Skipped invalid spec file {path}: {e}")
+            logger.warning(f"Skipped invalid spec file {path}: {e}")
+
     return specs
 
 

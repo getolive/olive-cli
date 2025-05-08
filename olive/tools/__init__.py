@@ -20,8 +20,8 @@ from olive.preferences import prefs
 from olive.tasks import task_manager
 
 # Ensure system‑prompt injectors are imported once
-from . import utils as _injectors  # noqa: F401  pylint: disable=unused-import
 from .models import ToolDescription, ToolEntry
+from . import utils as _injectors  # noqa: F401  pylint: disable=unused-import
 from .utils import extract_tool_calls
 
 logger = get_logger("tools")
@@ -216,7 +216,7 @@ class ToolRegistry:
             "🛠️ [Tool Usage Reference — for Olive's internal use]",
             "",
             "You have access to real tools. Wrap calls like:",
-            "<olive_tool><tool>TOOL</tool><input>{JSON}</input></olive_tool>",
+            "<olive_tool><tool>TOOL</tool><intent>WHAT IS YOUR INDENDED ACTION</intent><input>{JSON}</input></olive_tool>",
             "",
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         ]
@@ -235,43 +235,50 @@ class ToolRegistry:
         return "\n".join(lines)
 
     # ------------------------------------------------------------------ #
-    # LLM response post‑processing (unchanged)
+    # LLM response post‑processing
     # ------------------------------------------------------------------ #
-
     def process_llm_response_with_tools(
-        self, response: str, dispatch: bool = True
+        self,
+        response: str,
+        dispatch: bool = True,
     ) -> Union[str, List[str]]:
         """
-        Find <olive_tool> tags in an LLM response and optionally dispatch them.
+        Scan an LLM response for <olive_tool> … </olive_tool> blocks, convert them
+        to `ToolCall` objects, and (optionally) dispatch them.
+
+        • When `dispatch=True`  → returns list of async-task IDs.
+        • When `dispatch=False` → returns the original response string untouched.
         """
-        matches = extract_tool_calls(response)
+        from .models import ToolCall
+        calls: List[ToolCall] = extract_tool_calls(response)
+        print(f"[dim]🔍 Found {len(calls)} tool call(s). Dispatch={dispatch}[/dim]")
 
-        print(f"[dim]🔍 Found {len(matches)} tool call(s). Dispatch={dispatch}[/dim]")
-
-        if not matches:
+        if not calls:
             return response if not dispatch else []
 
         task_ids: List[str] = []
 
-        for tool, inp in matches:
-            tool = tool.strip()
-            inp = inp.strip()
+        for tc in calls:
+            summary = tc.intent or (tc.tool_input[:80] + "…")  # fallback preview
 
             if not dispatch:
                 print(
-                    f"\n[magenta]🛠 Detected Tool:[/magenta] {tool}\n[blue]Input:[/blue] {inp}"
+                    f"\n[magenta]🛠 Detected Tool:[/magenta] {tc.tool_name}"
+                    f"\n[blue]Intent:[/blue] {tc.intent}"
+                    f"\n[blue]Input:[/blue] {tc.tool_input}"
                 )
                 continue
 
             try:
-                tid = self.dispatch_async(tool, inp)
+                tid = self.dispatch_async(tc.tool_name, tc.tool_input)
                 task_ids.append(tid)
-                print(f"[green]✅ Dispatched '{tool}' as task {tid}[/green]")
-            except Exception as exc:  # noqa: BLE001
-                print(f"[red]❌ Failed to dispatch '{tool}': {exc}[/red]")
+                print(f"[green]✅ Dispatched '{tc.tool_name}' ({tid}): {summary}[/green]")
+            except Exception as exc:
+                print(f"[red]❌ Failed to dispatch '{tc.tool_name}': {exc}[/red]")
 
         return task_ids if dispatch else response
 
+    
 
 # ---------------------------------------------------------------------------
 # Singleton instance

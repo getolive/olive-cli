@@ -1,0 +1,4 @@
+- re-introduce the nicer mgt commands for specs, re-add pytest coverage
+- properly handle in-session log rotation (& dynamically changing handlers)
+- finish pytest coverage to >80% for existing api stability
+- [...]

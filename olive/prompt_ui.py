@@ -24,7 +24,9 @@ from prompt_toolkit.styles import Style
 
 from olive.logger import get_logger
 from olive.preferences import prefs
-from olive.ui import OLIVE_THEME, print_error, print_info
+from olive.ui import OLIVE_THEME, print_error
+
+
 
 logger = get_logger(__name__)
 
@@ -187,7 +189,6 @@ def handle_ctrl_c(event):
                     app._redraw()
                 except Exception:
                     pass
-            # Cleared prompt input. (Press Ctrl+C again quickly to exit.)
             _last_ctrl_c_time[0] = now
             _ctrlc_hint_active[0] = True
         else:
@@ -195,16 +196,13 @@ def handle_ctrl_c(event):
                 logger.debug(
                     f"[handle_ctrl_c] double Ctrl+C detected: now={now}, last={_last_ctrl_c_time[0]}"
                 )
-                # print("[Olive] Exiting on double Ctrl+C.")
                 buf = app.current_buffer
-                print_info("gracefully exiting on double Ctrl+C. re-open olive shell anytime to pick up where you left off")
                 buf.text = ":exit"
                 buf.validate_and_handle()
                 _last_ctrl_c_time[0] = now
                 _ctrlc_hint_active[0] = True
                 return
             else:
-                # (Double Ctrl+C to exit) No input to clear
                 _last_ctrl_c_time[0] = now
                 _ctrlc_hint_active[0] = True
     except Exception as e:

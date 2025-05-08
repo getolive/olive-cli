@@ -1,9 +1,8 @@
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 import olive.shell.__init__ as shell_main
+from olive import init as init_main
 
-
-@pytest.mark.asyncio
 @pytest.mark.asyncio
 async def test_run_shell_command_forwards_to_single_daemon(monkeypatch):
     from unittest.mock import MagicMock
@@ -54,7 +53,7 @@ async def test_run_shell_command_subprocess_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_interactive_shell_eoferror(monkeypatch):
-    monkeypatch.setattr(shell_main, "initialize_shell_session", lambda: None)
+    monkeypatch.setattr(init_main, "initialize_shell_session", lambda: None)
     monkeypatch.setattr(shell_main, "register_commands", lambda cmds: None)
     session_mock = MagicMock()
     session_mock.prompt_async = AsyncMock(side_effect=EOFError)
