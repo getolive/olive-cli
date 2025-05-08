@@ -1,0 +1,201 @@
+# olive/tools/spec/admin.py
+"""
+Spec Management Commands – Olive Builder Mode
+Manage feature specs from the CLI: list, inspect, delete, set-active.
+"""
+
+import os
+import shutil
+from pathlib import Path
+
+from olive.canonicals.spec.storage import get_all_specs
+from olive.tools.spec.state import get_active_spec_id, set_active_spec_id, clear_active_spec_id
+from olive.logger import get_logger
+from olive.prompt_ui import olive_management_command
+from olive.ui import (
+    print_primary,
+    print_success,
+    print_warning,
+    print_error,
+    print_info,
+)
+from olive.preferences import Preferences
+from olive.shell.dispatchers import _dispatch_shell_exec
+
+import inspect
+
+imported_by = inspect.stack()[1].filename
+
+logger = get_logger("tools.spec.admin")
+
+logger.info(f"imported olive.tools.spec.admin from {imported_by}")
+
+def _find_spec_by_id(specs, spec_id: str):
+    # 1. Exact match
+    for spec in specs:
+        if spec.id == spec_id:
+            return spec
+    # 2. Single match via startswith
+    sw_matches = [spec for spec in specs if spec.id.startswith(spec_id)]
+    if len(sw_matches) == 1:
+        return sw_matches[0]
+    # 3. Single match via contains
+    c_matches = [spec for spec in specs if spec_id in spec.id]
+    if len(c_matches) == 1:
+        return c_matches[0]
+    return None
+
+
+def _sort_specs_for_display(specs, active_id):
+    # Move active to front, then by desired status order, then by created_at
+    status_order = {
+        "open": 0,
+        "in-progress": 1,
+        "complete": 2,
+        "cancelled": 3,
+    }
+
+    def sort_key(spec):
+        if spec.id == active_id:
+            return (-1, 0, spec.created_at)
+        return (0, status_order.get(spec.status, 99), spec.created_at)
+
+    return sorted(specs, key=sort_key)
+
+
+@olive_management_command(":specs")
+def specs_list_command():
+    """List all specs (ID, title, status), active first, then by status."""
+    specs = get_all_specs()
+    active_id = get_active_spec_id()
+    if not specs:
+        print_warning("No specs found.")
+        return
+    print_primary("Olive Specs:")
+    sorted_specs = _sort_specs_for_display(specs, active_id)
+    for spec in sorted_specs:
+        if spec.id == active_id:
+            print_primary(f">> Active ({spec.status}): {spec.id} – {spec.title}")
+        else:
+            print_info(f"({spec.status}) {spec.id} – {spec.title}")
+
+    return sorted_specs
+
+
+@olive_management_command(":spec")
+def spec_detail_command(arg: str = "", event=None, app=None):
+    """Show spec details for <id> (supports full/partial/contains ID).
+    -e/--edit: injects !<editor> <spec-path> into shell buffer using preferences."""
+
+    specs = get_all_specs()
+    if not specs:
+        print_error("No specs found.")
+        return
+
+    # Parse arguments (ID + flags), following Olive's own parsing idiom
+    tokens = arg.strip().split() if arg else []
+    edit_flag = any(t in ("-e", "--edit") for t in tokens)
+    id_token = next((t for t in tokens if not t.startswith("-")), None)
+
+    if not id_token:
+        id_token = get_active_spec_id()
+
+    spec = _find_spec_by_id(specs, id_token)
+    if not spec:
+        print_error(f"No spec found with ID or unique fragment: '{id_token}'")
+        return
+
+    # Handle -e/--edit (open in preferred editor via shell buffer injection)
+    if edit_flag:
+        prefs = Preferences()
+        editor = prefs.get("builder_mode", "editor")
+        if not editor:
+            editor = "vim" if shutil.which("vim") else None
+        if not editor:
+            print_warning(
+                "No editor set in preferences and 'vim' not found in PATH. Set builder_mode.editor in your global Olive preferences to enable editing."
+            )
+            return
+        spec_path = spec.filename()
+        if not os.path.isfile(spec_path):
+            print_error(f"Spec file not found at {spec_path}.")
+            return
+
+        shell_cmd = f"{editor} {spec_path}"
+        # Inject into buffer if possible, else print command
+
+        _dispatch_shell_exec(shell_cmd)
+        logger.info(f"opened spec {spec.id} @ {spec_path} in {editor}")
+        return
+
+    # Print spec details
+    print_primary(f"Spec: {spec.id}")
+    print_info(f"Title: {spec.title}")
+    print_info(f"Status: {spec.status}")
+    print_info(f"Description: {spec.description}")
+    print_info(f"Created at: {spec.created_at}")
+    print_info(f"Branch: {spec.branch}")
+    if getattr(spec, "subtasks", None):
+        print_info("Subtasks:")
+        for st in spec.subtasks:
+            print_info(f"  - {'[x]' if st.get('done') else '[ ]'} {st.get('task')}")
+    if getattr(spec, "comments", None):
+        print_info("Comments:")
+        for c in spec.comments:
+            print_info(f"  - {c}")
+
+    return spec
+
+@olive_management_command(":spec delete")
+def spec_delete_command(arg: str = ""):
+    """Delete a spec by <id> (prompt unless -f)."""
+    args = arg.strip().split()
+    if not args:
+        print_error("Usage: :spec delete <id> [-f]")
+        return
+    spec_id = args[0]
+    force = "-f" in args
+    specs = get_all_specs()
+    try:
+        spec = _find_spec_by_id(specs, spec_id)
+        if not spec:
+            print_error(f"No spec found matching ID '{spec_id}'")
+            return
+        path = Path(spec.filename())
+        if not force:
+            print_warning(f"About to delete spec {spec.id}: {spec.title}")
+            print_warning("This cannot be undone.")
+            confirm = input("Are you sure? [y/N] ").lower()
+            if confirm != "y":
+                print_info("Delete cancelled.")
+                return
+        if spec.id == get_active_spec_id():
+            clear_active_spec_id()
+        path.unlink()
+        print_success(f"Deleted spec {spec.id}")
+    except ValueError as e:
+        print_error(str(e))
+    except Exception as e:
+        print_error(f"Failed to delete: {e}")
+
+    return spec
+
+@olive_management_command(":spec set-active")
+def spec_set_active_command(arg: str = ""):
+    """Set a spec as the active spec (supports partial ID)."""
+    spec_id = arg.strip()
+    specs = get_all_specs()
+    if not spec_id:
+        print_error("Usage: :spec set-active <id>")
+        return
+    try:
+        spec = _find_spec_by_id(specs, spec_id)
+        if not spec:
+            print_error(f"No spec found matching ID '{spec_id}'")
+            return
+        set_active_spec_id(spec.id)
+        print_success(f"Set active spec to: {spec.id} – {spec.title}")
+    except ValueError as e:
+        print_error(f"Unable to find and work with spec: {str(e)}")
+
+    return spec

@@ -19,7 +19,7 @@ def describe_tool() -> ToolDescription:
         "description": "Run safe shell commands through Olive.",
         "allowed_commands": [],  # Display-only: populated dynamically
         "examples": [
-            "<olive_tool><tool>shell</tool><input>ls -la</input></olive_tool>",
+            "<olive_tool><tool>shell</tool><intent>Review file listing details to decide where to begin.</intent><input>ls -la</input></olive_tool>",
         ],
     }
 

@@ -5,14 +5,15 @@ from datetime import datetime
 
 from rich import print
 
+from olive.ui import print_info
 from olive.prompt_ui import olive_management_command, session
-from olive.tools import tool_registry
+from olive.shell.dispatchers import dispatch
 
 USAGE = "[yellow]Usage: :spec [list|create|complete|cancel] ...[/yellow]"
 
 
 @olive_management_command(":spec")
-def spec_command(args: str = ""):
+async def spec_command(args: str = ""):
     """Manage feature specs: list, create, complete, cancel."""
 
     tokens = shlex.split(args)
@@ -67,5 +68,6 @@ def spec_command(args: str = ""):
         print(USAGE)
         return
 
-    result = tool_registry.dispatch("spec", payload)
-    print(json.dumps(result, indent=2))
+    result = await dispatch(f"!!spec {payload}", interactive=True)
+    if not result:
+        print_info("empty result.")

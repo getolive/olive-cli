@@ -1,17 +1,15 @@
 # tools/admin.py
-from rich.console import Console
 from rich.table import Table
 
 from olive.preferences import prefs
 from olive.prompt_ui import olive_management_command
 from olive.tools import tool_registry
+from olive.ui import console
 
 
 @olive_management_command(":tools")
 def tools_summary_command():
     """Print a cleaned-up summary of Olive's tool configuration and availability."""
-    console = Console()
-
     sandbox_enabled = prefs.is_sandbox_enabled()
     sandbox_msg = (
         "[green]🛡️ Sandbox enabled[/green]"

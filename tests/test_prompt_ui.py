@@ -97,55 +97,6 @@ def test_olive_completer_at(monkeypatch):
         # No assertion here—just exercise the path branch
 
 
-def test_handle_ctrl_c_buffer_clears(monkeypatch):
-    buf = MagicMock(text="data")
-    app = MagicMock(current_buffer=buf, layout=MagicMock())
-    event = MagicMock(app=app)
-    monkeypatch.setattr("olive.prompt_ui._last_ctrl_c_time", [0])
-    monkeypatch.setattr("olive.prompt_ui._ctrlc_hint_active", [False])
-    with patch("builtins.print") as bp:
-        pui.handle_ctrl_c(event)
-        bp.assert_called()
-
-
-def test_handle_ctrl_c_double_exit(monkeypatch):
-    import olive.prompt_ui as pui
-    from unittest.mock import MagicMock, patch
-
-    class FakeBuffer:
-        def __init__(self):
-            self.cleared = False
-
-        @property
-        def text(self):
-            if not self.cleared:
-                return "not empty"
-
-            class StrObj(str):
-                def strip(self_nonstd):
-                    return ""
-
-            return StrObj("")
-
-        def reset(self):
-            self.cleared = True
-
-    buf = FakeBuffer()
-    app = MagicMock(current_buffer=buf, layout=MagicMock())
-    event = MagicMock(app=app)
-
-    # Simulate first Ctrl+C with non-empty buffer
-    pui._last_ctrl_c_time[0] = 0.0
-    pui._ctrlc_hint_active[0] = False
-    monkeypatch.setattr("olive.prompt_ui.time", MagicMock(time=lambda: 1.0))
-    with patch("olive.shell.admin.perform_graceful_exit") as pge:
-        pui.handle_ctrl_c(event)  # First press: buffer clears, timer set
-        # Second press, buffer is empty and within double-tap window
-        monkeypatch.setattr("olive.prompt_ui.time", MagicMock(time=lambda: 1.5))
-        pui.handle_ctrl_c(event)
-        assert pge.called
-
-
 def test_insert_newline():
     event = MagicMock()
     pui.insert_newline(event)

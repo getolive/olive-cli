@@ -38,10 +38,10 @@ def describe_tool() -> ToolDescription:
         ),
         "allowed_commands": ["get", "patch", "replace-lines", "create"],
         "examples": [
-            '<olive_tool><tool>src</tool><input>{"command": "get", "path": "olive-cli/olive/llm.py"}</input></olive_tool>',
-            '<olive_tool><tool>src</tool><input>{"command": "create", "path": "olive-cli/new_file.py", "content": "# New file\\nprint(\\"hello\\")"}</input></olive_tool>',
-            '<olive_tool><tool>src</tool><input>{"command": "replace-lines", "path": "olive-cli/olive/shell.py", "start": 77, "end": 80, "lines": ["def reset():", "    print("done")"]}</input></olive_tool>',
-            '<olive_tool><tool>src</tool><input>{"command": "patch", "path": "olive-cli/olive/shell.py", "patch": "--- a/olive-cli/olive/shell.py\\n+++ b/olive-cli/olive/shell.py\\n@@ -77,7 +77,11 @@\\n-    pass\\n+    print(\\"reset\\")", "dry_run": true}</input></olive_tool>',
+            '<olive_tool><tool>src</tool><intent>Reviewing full source of llm.py before further updates.</intent><input>{"command": "get", "path": "olive-cli/olive/llm.py"}</input></olive_tool>',
+            '<olive_tool><tool>src</tool><intent>Creating our new scaffold as ./new_file.py.</intent><input>{"command": "create", "path": "olive-cli/new_file.py", "content": "# New file\\nprint(\\"hello\\")"}</input></olive_tool>',
+            '<olive_tool><tool>src</tool><intent>Replacing 77-80 with the new reset function</intent><input>{"command": "replace-lines", "path": "olive-cli/olive/shell.py", "start": 77, "end": 80, "lines": ["def reset():", "    print("done")"]}</input></olive_tool>',
+            '<olive_tool><tool>src</tool><intent>Using a git style patch to be hyper-surgical with a debug print</intent><input>{"command": "patch", "path": "olive-cli/olive/shell.py", "patch": "--- a/olive-cli/olive/shell.py\\n+++ b/olive-cli/olive/shell.py\\n@@ -77,7 +77,11 @@\\n-    pass\\n+    print(\\"reset\\")", "dry_run": true}</input></olive_tool>',
         ],
     }
 

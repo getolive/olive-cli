@@ -28,20 +28,23 @@ async def dispatch(user_input: str, interactive: bool):
     if not user_input.strip():
         return
     # Management commands (e.g., :exit, :prefs, :tools) are always handled first
-    if user_input.strip().startswith(':'):
+    if user_input.strip().startswith(":"):
         return await _dispatch_management(user_input, interactive)
-    if user_input.strip().startswith('!!'):
+    if user_input.strip().startswith("!!"):
         return await _dispatch_tool_call(user_input, interactive)
-    if user_input.strip().startswith('!'):
+    if user_input.strip().startswith("!"):
         return _dispatch_shell_exec(user_input[1:].strip())
-    if user_input.strip().startswith('@'):
+    if user_input.strip().startswith("@"):
         return _dispatch_atcommand(user_input)
     # Sandbox guard: block commands if sandbox is required but not running
 
     prefs = get_prefs_lazy()
     if prefs.is_sandbox_enabled() and not sandbox.is_running():
         from olive.ui import print_warning
-        print_warning("Sandbox is enabled in preferences, but is not running. Command not dispatched. Use :sandbox-start to start it.")
+
+        print_warning(
+            "Sandbox is enabled in preferences, but is not running. Command not dispatched. Use :sandbox-start to start it."
+        )
         return
 
     # All other input: LLM fallback
@@ -142,7 +145,16 @@ def _dispatch_shell_exec(command: str):
     """
     try:
         args = shlex.split(command)
-        interactive_cmds = {"nvim", "vim", "htop", "less", "more", "top", "man"}
+        interactive_cmds = {
+            "nvim",
+            "vim",
+            "htop",
+            "less",
+            "more",
+            "top",
+            "man",
+            "python",
+        }
         base = args[0] if args else ""
 
         if base in interactive_cmds:

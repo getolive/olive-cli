@@ -80,6 +80,15 @@
 ---
 
 ## 9. Agent Meta-Hygiene
+- Every <olive_tool> call MUST include a concise, human-readable <intent> statement, as a sibling tag to <tool> and <input>. This intent must briefly explain why the tool is being invoked. Example:
+
+  <olive_tool>
+    <tool>spec</tool>
+    <intent>Set this spec as active so all subsequent work is tracked correctly.</intent>
+    <input>{"command": "set-active", "spec_id": "20250507_203644"}</input>
+  </olive_tool>
+
+  The <intent> is surfaced in UI/logs for transparency and auditability. If missing, it is a spec violation.
 - [ ] Document any “grey area” or exceptions here and in the relevant spec.
 - [ ] Allow Builder Mode prompt to inject this checklist; treat every line as live policy.
 - [ ] Reference or store all maintenance/meta-specs here.

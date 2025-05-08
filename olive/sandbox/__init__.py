@@ -313,7 +313,6 @@ class SandboxManager:
             raise RuntimeError("dispatch_task called outside sandbox session")
 
         rpc_dir = env.get_sandbox_rpc_dir()
-        result_dir = env.get_tasks_root()
 
         result_filename = spec.return_id or spec.id
         task_path = env.get_task_file(result_filename)
@@ -358,6 +357,7 @@ class SandboxManager:
                 "return_id": spec.return_id,
                 "result_path": str(env.get_result_file(result_filename)),
             }
+
 
         result_path = env.get_result_file(result_filename)
         logger.info("Waiting for result via watchdog: %s", result_path)

@@ -1,10 +1,12 @@
 # cli/olive/tools/utils.py
 
 import re
-from typing import List, Tuple
+from typing import List, Any
 
+from pydantic import ValidationError
 from olive.context.injection import olive_context_injector
 from olive.logger import get_logger
+
 
 logger = get_logger("tools.utils")
 
@@ -13,8 +15,21 @@ _OLIVE_BLOCK_RE = re.compile(
     flags=re.IGNORECASE | re.DOTALL,
 )
 
+# extract <tool>…</tool>   then   <input> … </input>
+#    • tolerant of attrs / whitespace
+#    • if </input> is absent, capture runs to end-of-block ($)
 _TOOL_INPUT_RE = re.compile(
-    r"<tool>(.*?)</tool>.*?<input>([\s\S]*?)</input>",
+    r"<tool\b[^>]*>(.*?)</tool>"          # 1️⃣ tool name
+    r"[\s\S]*?"                           #     anything up to <input>
+    r"<input\b[^>]*>"                     #     input tag
+    r"([\s\S]*?)"                         # 2️⃣ payload
+    r"(?:</input\b[^>]*>|$)",             # stop at </input> or end-of-block
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
+_INTENT_RE = re.compile(
+    r"<intent\b[^>]*>(.*?)</intent>|"  # long form
+    r"<intent\b[^>]*\bvalue=['\"](.*?)['\"][^>]*/?>",  # self-closing
     flags=re.IGNORECASE | re.DOTALL,
 )
 
@@ -42,20 +57,37 @@ def render_tools_context_for_llm() -> List[str]:
         return []
 
 
-def extract_tool_calls(text: str) -> List[Tuple[str, str]]:
+# ──────────────────────────────
+# Public API
+# ──────────────────────────────
+def extract_tool_calls(text: str) -> List[Any]:
     """
-    Return a list of (tool_name, input_payload) tuples.
+    Extract <olive_tool> … </olive_tool> blocks and return validated ToolCall objects.
 
-    • Robust to raw '<' '>' inside <input>.
     • Ignores malformed blocks gracefully.
-    • No XML parsing; pure regex, so it's fast and tolerant.
+    • Still regex-only: fast and tolerant of raw '<' / '>' inside <input>.
     """
-    calls: List[Tuple[str, str]] = []
+    from .models import ToolCall
+    calls: List[ToolCall] = []
+
     for block in _OLIVE_BLOCK_RE.findall(text):
-        m = _TOOL_INPUT_RE.search(block)
-        if not m:
-            continue  # skip malformed / partial blocks
-        tool, inp = m.group(1).strip(), m.group(2).strip()
-        if tool and inp:
-            calls.append((tool, inp))
+        ti_match = _TOOL_INPUT_RE.search(block)
+        if not ti_match:
+            continue  # skip if tool/input missing
+
+        tool = ti_match.group(1).strip()
+        inp = ti_match.group(2).strip()
+
+        intent_match = _INTENT_RE.search(block)
+        intent = (
+            (intent_match.group(1) or intent_match.group(2)).strip()
+            if intent_match
+            else ""
+        )
+
+        try:
+            calls.append(ToolCall(tool_name=tool, intent=intent, tool_input=inp))
+        except ValidationError as e:
+            logger.warning("Skipping malformed tool call: %s", e)
+
     return calls

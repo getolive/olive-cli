@@ -1,21 +1,16 @@
 # cli/olive/cli.py
 import asyncio
-import json
 import os
 import signal
 import subprocess
 import sys
-import uuid
-from pathlib import Path
 from olive.canonicals import CanonicalRegistry
-from olive.tools import ToolRegistry
 import typer
 
-from olive import env
 from olive.context import context
 from olive.daemon import process_manager
 from olive.init import initialize_olive, validate_olive
-from olive.shell import run_shell_command, run_interactive_shell
+from olive.shell import run_interactive_shell
 from olive.tasks.runner import run_task_from_file
 from olive.tools.admin import tools_summary_command
 
@@ -46,17 +41,11 @@ def init():
 
 
 @app.command()
-@app.command()
 def shell():
     """Start the Olive shell interactively or execute a one-off command via `-c`."""
-    import sys
     from olive.logger import get_logger
-    from olive.prompt_ui import register_commands
     from olive.preferences.admin import get_prefs_lazy
     from olive.sandbox import SandboxManager
-    from olive.shell import run_interactive_shell
-    from olive.canonicals import CanonicalRegistry
-    from olive.tools import ToolRegistry
 
     logger = get_logger()
     prefs = get_prefs_lazy()
@@ -64,13 +53,15 @@ def shell():
     Canonicals = CanonicalRegistry()
     Canonicals.discover_all(install=True)
     from olive.tools import tool_registry
+
     tool_registry.discover_all(install=True)
 
     try:
         import asyncio
+
         asyncio.run(run_interactive_shell())
     except KeyboardInterrupt:
-        print('\n[Olive] Exiting shell (KeyboardInterrupt).')
+        print("\n[Olive] Exiting shell (KeyboardInterrupt).")
         # Clean up: stop sandbox if running, flush logs, exit gracefully
         try:
             if prefs.is_sandbox_enabled():
@@ -80,6 +71,8 @@ def shell():
         except Exception as e:
             logger.warning(f"[Olive] Exception during sandbox cleanup: {e}")
         sys.exit(0)
+
+
 def context_command():
     """Show the current active context files and tail of active.json."""
     from olive.context.admin import show_context_summary

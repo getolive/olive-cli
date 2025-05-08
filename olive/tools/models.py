@@ -16,6 +16,10 @@ from olive.tasks.models import TaskResult, TaskSpec, TaskStatus
 
 logger = get_logger("tools")
 
+class ToolCall(BaseModel):
+    tool_name: str
+    tool_input: str
+    intent: str
 
 class ToolDescription(BaseModel):
     name: str
