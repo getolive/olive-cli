@@ -28,8 +28,6 @@ from tempfile import NamedTemporaryFile
 
 from rich.errors import LiveError
 from rich.markup import escape
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
 
 from olive import env
 from olive.logger import get_logger
@@ -57,6 +55,49 @@ def _safe_status(msg: str):
         yield console
 
 
+@docker_required
+def _safe_ensure_buildx() -> None:
+    """
+    Make sure Docker Buildx is installed and an active builder exists.
+    Creates a container‐driver builder named 'olive-builder' the first time.
+    """
+    if not prefs.is_sandbox_enabled():
+        return
+
+    if shutil.which("docker") is None:
+        raise RuntimeError("Docker not found – install Docker to use Olive sandbox.")
+
+    # 1) Is buildx sub-command present?
+    if (
+        subprocess.run(["docker", "buildx", "version"], capture_output=True).returncode
+        != 0
+    ):
+        raise RuntimeError("Docker Buildx is not available (Docker ≥20.10 required).")
+
+    # 2) Do we already have a usable builder?
+    inspect = subprocess.run(
+        ["docker", "buildx", "inspect"], capture_output=True, text=True
+    )
+    if inspect.returncode == 0 and "Driver:" in inspect.stdout:
+        return  # we’re good
+
+    # 3) No builder yet – create one
+    subprocess.check_call(
+        [
+            "docker",
+            "buildx",
+            "create",
+            "--name",
+            "olive-builder",
+            "--driver",
+            "docker-container",
+            "--bootstrap",  # start the buildx container now
+            "--use",  # set as current
+        ]
+    )
+    logger.info("Created and bootstrapped Docker buildx builder 'olive-builder'.")
+
+
 # ──────────────────────────────────────────────────────────────
 # Sandbox manager
 # ──────────────────────────────────────────────────────────────
@@ -64,6 +105,7 @@ class SandboxManager:
     def __init__(self) -> None:
         self.container_name: str | None = None
         self.log_path: Path = env.get_logs_root() / "sandbox.log"  # ensures dir
+        _safe_ensure_buildx()
 
     # ────────────────────────────────────────────── build phase
     def write_dockerignore(self) -> None:
@@ -168,6 +210,7 @@ class SandboxManager:
             logger.info("No rebuild necessary.")
             return
 
+        """
         cmd = [
             "docker",
             "build",
@@ -177,6 +220,27 @@ class SandboxManager:
             "olive/sandbox:latest",
             str(proj_root),
         ]
+        """
+        # ── Build with Buildx + inline cache ───────────────────────
+        cmd = [
+            "docker",
+            "buildx",
+            "build",
+            "--load",  # <── so later docker run works
+            "--cache-to",
+            "type=inline",
+            "--cache-from",
+            "type=inline",
+            "-t",
+            "olive/sandbox:latest",
+            "-f",
+            str(dockerfile_path),
+            str(proj_root),
+        ]
+
+        env_vars = os.environ.copy()
+        env_vars.setdefault("DOCKER_BUILDKIT", "1")  # guarantee BuildKit on
+
         with _safe_status("Building sandbox image…") as st:
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
@@ -185,13 +249,13 @@ class SandboxManager:
             for line in proc.stdout:
                 clean = ANSI_RE.sub("", line).strip()
                 if clean:
-                    logger.debug("[docker build] %s", clean)
+                    logger.debug("[docker build*x*] %s", clean)
                     with console_lock():
                         st.update(f"[secondary]{escape(clean[:80])}[/secondary]")
             proc.wait()
 
         if proc.returncode:
-            raise RuntimeError("Docker build failed; see log.")
+            raise RuntimeError("Docker buildx failed; see log.")
         logger.info("✅ Sandbox image built successfully.")
 
     # ────────────────────────────────────────────── lifecycle
@@ -357,7 +421,6 @@ class SandboxManager:
                 "return_id": spec.return_id,
                 "result_path": str(env.get_result_file(result_filename)),
             }
-
 
         result_path = env.get_result_file(result_filename)
         logger.info("Waiting for result via watchdog: %s", result_path)

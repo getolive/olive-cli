@@ -1,76 +1,70 @@
 # olive/sandbox/Dockerfile(.template)
+# syntax=docker/dockerfile:1.7-labs
+#################################################################
+##  Stage 0 — OS, uv, Playwright + Chromium (rarely changes)
+#################################################################
+ARG PYTHON_VERSION=3.13
+FROM python:${PYTHON_VERSION}-slim AS base
+ARG PLAYWRIGHT_VERSION=1.52.0
+ARG DEBIAN_FRONTEND=noninteractive
 
-#
-# IMPORTANT BUILD NOTE:
-# You must set the build context to the project root, which contains cli/,
-# pyproject.toml, and everything else Olive needs.
-#
-# TODO: REMOVEME/REPLACEME/GENERICIZEME
-# example for local olive development:
-# cd ~/Projects/olive && docker build -f cli/olive/sandbox/Dockerfile -t olive/sandbox:latest .
-
-
-# ─────────────────────────────────────────────────────────────
-# 🧱 Olive Sandbox Dockerfile (multi-stage, optimized)
-# This image runs the Olive CLI inside a containerized sandbox.
-# Behavior:
-# - Installs Olive from source into a venv using uv
-# - Mounts the host project at /mnt/project
-# - Copies ~/.olive into /home/olive/.olive (but disables sandbox in preferences)
-# - Runs `olive init` inside the mounted project to prepare it as an Olive repo
-# - Launches as an unprivileged user
-# ─────────────────────────────────────────────────────────────
-
-FROM python:3.13-slim AS builder
-
-# Install required build deps
-RUN apt-get update && apt-get install -y \
-    git bash curl build-essential \
+# Persist apt & uv wheel caches between builds
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt   \
+    apt-get update &&                       \
+    apt-get install -y --no-install-recommends \
+        git curl build-essential dumb-init tmux  \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv globally
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && mv /root/.local/bin/uv /usr/local/bin/uv
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN mkdir -p /ms-playwright \
+    && chmod 0755 /ms-playwright
 
+RUN pip install --no-cache-dir "uv>=0.2" && \
+    pip install --no-cache-dir playwright==${PLAYWRIGHT_VERSION} && \
+    playwright install --with-deps chromium \
+        && chmod -R a+rX /ms-playwright
+
+
+#################################################################
+##  Stage 1 — Olive + its deps  (rebuilds only when Olive itself changes)
+#################################################################
+FROM base AS builder
 WORKDIR /olive
+
+# -- We always copy Olive into a *stable* staging path inside the context --
+#    That keeps this layer's cache key identical between different projects
+#    on the same host, so you pay the cost exactly once per Olive version.
 COPY {{ olive_source_path }} /olive
 
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv venv && \
+    uv pip install --no-cache-dir -e ".[dev,http,syntax]" && \
+    uv pip install "playwright==${PLAYWRIGHT_VERSION}"
 
-
-# Install Olive into a venv at root
-RUN uv venv && uv pip install -e ".[dev,http,syntax]"
-
-# ─────────────────────────────────────────────────────────────
-# Runtime stage ─────────────────────────────────────────────────────────────
-
-FROM python:3.13-slim
-
-# Create non-root Olive user with home directory
+#################################################################
+##  Stage 2 — Runtime image (rebuilds only when prefs snapshot changes)
+#################################################################
+FROM base AS runtime
 RUN useradd -m -d /home/olive olive
 
-# Minimal runtime deps
-RUN apt-get update \
-    && apt-get install -y uuid-runtime bash git curl tmux \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy preinstalled Olive venv and code
+# Copy pre-built venv *and* Olive source tree from builder stage
 COPY --from=builder /olive /olive
 
-# Copy host snapshot of ~/.olive (.olive-snapshot) into container home (not mounted)
-COPY {{ olive_prefs_snapshot }} /home/{{ olive_user }}/.olive
+# Snapshot of ~/.olive (may change per project → cheap layer)
+COPY {{ olive_prefs_snapshot }} /home/olive/.olive
 
 # Disable sandbox inside container prefs (avoid nested sandbox inside sandbox)
 RUN /olive/.venv/bin/python -c "import yaml; p = '/home/olive/.olive/preferences.yml'; d = yaml.safe_load(open(p)); d['sandbox']['enabled'] = False; open(p, 'w').write(yaml.safe_dump(d))"
 
-# Ensure ownership
 RUN chown -R olive:olive /home/olive/.olive
 
-# Entrypoint, activate venv, set to executable 
+# Existing entrypoint (unchanged)
 COPY .olive/sandbox/entrypoint.sh /usr/local/bin/olive
 RUN chmod +x /usr/local/bin/olive
 
 USER olive
-
 ENV HOME=/home/olive
 WORKDIR /mnt/project
 ENTRYPOINT ["/usr/local/bin/olive"]
