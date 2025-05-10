@@ -3,7 +3,6 @@ import json
 import tempfile
 from pathlib import Path
 
-from rich import print
 from rich.tree import Tree
 
 from olive.canonicals.spec.models import FeatureSpec
@@ -39,28 +38,28 @@ def show_context_summary():
     chat_count = len(context.state.chat)
     metadata_count = len(context.state.metadata)
 
-    print("[bold underline]🧠 Olive Context Summary[/bold underline]\n")
-    print(f"[bold]Mode:[/bold] {mode}")
-    print(f"[bold]Model:[/bold] {model_name}")
+    console.print("[bold underline]🧠 Olive Context Summary[/bold underline]\n")
+    console.print(f"[bold]Mode:[/bold] {mode}")
+    console.print(f"[bold]Model:[/bold] {model_name}")
 
     # Show builder mode spec if active
     spec_id = get_active_spec_id()
     if spec_id:
         try:
             spec = FeatureSpec.load(spec_id)
-            print(f"[bold]📌 Builder Mode:[/bold] Editing feature: {spec.title}")
+            console.print(f"[bold]📌 Builder Mode:[/bold] Editing feature: {spec.title}")
         except Exception:
             pass
 
-    print(f"\n[bold]System Messages:[/bold] {system_count}")
+    console.print(f"\n[bold]System Messages:[/bold] {system_count}")
     for msg in context.state.system:
         short = msg.strip().replace("\n", " ")[:CHAT_PREVIEW_CHARS]
-        print(f" [system] {short}{'...' if len(msg) > CHAT_PREVIEW_CHARS else ''}")
+        console.print(f" [system] {short}{'...' if len(msg) > CHAT_PREVIEW_CHARS else ''}")
 
-    print(f"[bold]Chat Messages:[/bold] {chat_count}")
+    console.print(f"[bold]Chat Messages:[/bold] {chat_count}")
     for m in context.state.chat[-5:]:
         content = m.content.replace("\n", " ")[:CHAT_PREVIEW_CHARS]
-        print(
+        console.print(
             f" [{m.role}] {content}{'...' if len(m.content) > CHAT_PREVIEW_CHARS else ''}"
         )
 
@@ -69,8 +68,8 @@ def show_context_summary():
         if max_files == -1
         else f"(preferences.yml: max_files = {max_files})"
     )
-    print(f"[bold]Files Included:[/bold] {file_count} {suffix}")
-    print(f"[bold]Metadata Files:[/bold] {metadata_count}")
+    console.print(f"[bold]Files Included:[/bold] {file_count} {suffix}")
+    console.print(f"[bold]Metadata Files:[/bold] {metadata_count}")
 
     # Token estimate
     try:
@@ -79,16 +78,16 @@ def show_context_summary():
         llm = LLMProvider()
         messages, stats = llm.build_payload(prompt="(context summary)", dry_run=True)
         percent = (stats["token_count"] / stats["max_tokens"]) * 100
-        print(
+        console.print(
             f"[bold]Estimated Tokens:[/bold] {stats['token_count']} / {stats['max_tokens']} ({percent:.1f}%)"
         )
 
     except Exception as e:
-        print(f"[red]Token estimation failed: {e}[/red]")
+        console.print(f"[red]Token estimation failed: {e}[/red]")
 
     # Show files as tree
     if file_count:
-        print("\n[bold]Files:[/bold]")
+        console.print("\n[bold]Files:[/bold]")
         file_tree = Tree("Project Files")
         sorted_paths = sorted(context.state.files[:file_count], key=lambda f: f.path)
 
@@ -101,15 +100,15 @@ def show_context_summary():
                 folders[parent] = file_tree.add(parent)
             folders[parent].add(line_label)
 
-        print(file_tree)
+        console.print(file_tree)
 
     if context.state.extra_files:
-        print("\nExtra Files: ")
+        console.print("\nExtra Files: ")
         for context_file in context.state.extra_files:
-            print(f"{context_file.path} [{len(context_file.lines)} lines]")
+            console.print(f"{context_file.path} [{len(context_file.lines)} lines]")
 
-    print("\n" + "-" * 60)
-    print("\n[dim]Run :mock-ask to view full LLM payload.[/dim]")
+    console.print("\n" + "-" * 60)
+    console.print("\n[dim]Run :mock-ask to view full LLM payload.[/dim]")
 
 
 @olive_management_command(":dump-context")
@@ -119,7 +118,7 @@ def dump_context():
     )
     json.dump(context.to_dict(), tmp, indent=2)
     tmp.close()
-    print(f"[green]✅ Context dumped to:[/green] {tmp.name}")
+    console.print(f"[green]✅ Context dumped to:[/green] {tmp.name}")
 
 
 @olive_management_command(":payload-summary")
