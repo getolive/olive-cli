@@ -2,16 +2,15 @@
 import subprocess
 from shutil import which
 
-from rich import print
-from rich.console import Console
 from rich.panel import Panel
 from rich.tree import Tree
 
 from olive.logger import get_logger
 from olive.prompt_ui import olive_management_command
 
+from olive.ui import console, print_info, print_error
+
 logger = get_logger(__name__)
-console = Console()
 
 
 def get_prefs_lazy():
@@ -51,12 +50,12 @@ def prefs_show_summary(*args, **kwargs):
     prefs_path, exists = prefs.get_preferences_path()
 
     if not exists:
-        print(f"[bold red]❌ Preferences not found at {prefs_path}[/bold red]")
+        print_error(f"Preferences not found at {prefs_path}")
         return
 
-    print(
+    console.print(
         Panel.fit(
-            f"[bold cyan]Olive Preferences[/bold cyan]\n[dim]{prefs_path}[/dim]",
+            f"[primary]Olive Preferences[/primary]\n[info]{prefs_path}[/info]",
             title=f"Active Preferences ({'Full' if full else 'Abridged'})",
         )
     )
@@ -98,7 +97,7 @@ def prefs_show_summary(*args, **kwargs):
             display_val = str(val) if val is not None else "[grey50]—[/grey50]"
             tree.add(f"[bold]{label}[/bold]: {display_val}")
 
-        print(tree)
-        print(
-            "\n[dim]Tip: Run [bold]:prefs --full[/bold] to view the complete preference tree.[/dim]"
+        console.print(tree)
+        print_info(
+            "\nTip: Run [primary]:prefs --full[/primary] to view the complete preference tree."
         )
