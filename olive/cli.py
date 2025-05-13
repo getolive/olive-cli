@@ -230,7 +230,6 @@ def ask_command(
         # graceful degradation – echo back
         typer.echo(f"[stub] You said: {prompt} • (ask unavailable: {exc})")
 
-
 # ---------------------------------------------------------------------
 # Serve HTTP
 # ---------------------------------------------------------------------

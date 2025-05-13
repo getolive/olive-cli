@@ -93,26 +93,26 @@ def discover_components():
         logger.warning(f"Tools discovery failed: {e}")
 
 
-def start_sandbox_if_enabled(prefs):
+def start_sandbox_if_enabled(prefs) -> bool:
     if prefs.is_sandbox_enabled():
         try:
             olive.sandbox.admin.sandbox_start_command()
             logger.info("Sandbox started")
+            return True
         except Exception as e:
             logger.error(f"Failed to start sandbox: {e}")
             print_error("Failed to start sandbox — exiting shell.")
             raise SystemExit(1)
+    else:
+        return False
 
 
 def initialize_shell_session():
-    from uuid import uuid4
+    from olive.env import generate_session_id, get_session_id
 
-    import olive.env
+    generate_session_id()
 
-    olive.env.session_id = str(uuid4())[:8]
-    console.print(
-        f"[bold green]🌱 Welcome to Olive Shell[/bold green] [dim](session: {olive.env.session_id})[/dim]\n"
-    )
+    console.print("[bold green]🌱 Welcome to Olive Shell[/bold green]\n")
 
     prefs_show_summary()
 
@@ -130,10 +130,14 @@ def initialize_shell_session():
 
     console.print(tool_tree)
     if env.is_git_dirty():
-        print_info("\nFYI: your git repo is dirty (uncommitted changes detected, you can run !git diff from shell to review))\n")
+        print_info(
+            "\nFYI: your git repo is dirty (uncommitted changes detected, you can run !git diff from shell to review))\n"
+        )
 
     prefs = get_prefs_lazy()
-    start_sandbox_if_enabled(prefs)
+    sandbox_started = start_sandbox_if_enabled(prefs)
+    if sandbox_started:
+        console.print(f"[dim]sandbox session: {get_session_id()}[/dim]\n")
 
 
 def validate_olive():

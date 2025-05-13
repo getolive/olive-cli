@@ -24,6 +24,7 @@ import uuid
 from pathlib import Path
 from threading import Lock
 from typing import Optional
+#from olive.prompt_ui import olive_management_command
 
 # ──────────────────────────────────────────────────────────────
 # internal state
@@ -90,6 +91,7 @@ def get_current_logs_dir() -> Path:
 # ──────────────────────────────────────────────────────────────
 # session‑id helpers  (only daemons / sandbox call generate)
 # ──────────────────────────────────────────────────────────────
+#@olive_management_command(":session")
 def get_session_id() -> str | None:
     return _SESSION_ID
 
