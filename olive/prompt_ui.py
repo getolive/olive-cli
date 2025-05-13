@@ -27,7 +27,6 @@ from olive.preferences import prefs
 from olive.ui import OLIVE_THEME, print_error
 
 
-
 logger = get_logger(__name__)
 
 # ─── Prompt Styling ────────────────────────────────────────────────
