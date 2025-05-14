@@ -7,7 +7,7 @@
 uv pip install "git+https://github.com/getolive/olive-cli.git"
 
 # install (recommended, PEP508 with all optionals included)
-uv pip install "olive-cli[dev,http,syntax] @ git+https://github.com/getolive/olive-cli.git"
+uv pip install "olive[dev,http,syntax] @ git+https://github.com/getolive/olive-cli.git"
 
 # initialize (git is required, olive uses it for managing code changes
 git init
