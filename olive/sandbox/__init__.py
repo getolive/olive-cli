@@ -81,6 +81,10 @@ def _safe_ensure_buildx() -> None:
     if inspect.returncode == 0 and "Driver:" in inspect.stdout:
         return  # we’re good
 
+    ctx_vsp = env.get_project_root() / ".venv"
+    if not ctx_vsp.exists():
+        raise RuntimeError(".venv missing from build context – check .dockerignore")
+
     # 3) No builder yet – create one
     subprocess.check_call(
         [
@@ -137,15 +141,15 @@ class SandboxManager:
             ".git/",
             ".git/**/*",
             ".venv/",
-            ".venv/**/*",
+            ".venv/**.*",
             "__pycache__/",
             "node_modules/",
-            "venv/",
             ".olive/",
             ".olive/run/",
         ]
 
         allow = [
+            "!.venv/lib/*/site-packages/**",
             f"!{_rel(snapshot_dir)}",
             f"!{_rel(sbx_root / 'staging')}",
             f"!{_rel(sbx_root / 'staging' / 'olive')}/**",
