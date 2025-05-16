@@ -38,7 +38,7 @@ class MarkdownExtractor(BaseExtractor):
 
         # ── mandatory file-header (always first) ────────────────────
         header = make_entry(
-            name=path.name,
+            name=_rel_path(path),
             typ="file_header",
             path=path,
             start=1,
