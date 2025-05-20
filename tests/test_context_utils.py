@@ -113,3 +113,14 @@ def test_initialize_and_context_file_discovery(tmp_path, monkeypatch):
     if unwanted:
         raise AssertionError(f"Unexpected file(s) in context: {unwanted}")
     
+
+def test_discover_files_includes_extra(tmp_path):
+    from olive.context import OliveContext
+    # Create a dummy file and add it as an extra file
+    extra_file = tmp_path / "extra.txt"
+    extra_file.write_text("foo\nbar\nbaz\n")
+    ctx = OliveContext()
+    ctx.add_extra_file(str(extra_file), ["foo\n", "bar\n", "baz\n"])
+    files = ctx._discover_files(include_extra_files=True)
+    # Should find the extra file by path
+    assert any("extra.txt" in str(f) for f in files)

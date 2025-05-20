@@ -245,7 +245,7 @@ class OliveContext:
         return False
 
 
-    def _discover_files(self, inclue_extra_files=True) -> List[Path]:
+    def _discover_files(self, include_extra_files=True) -> List[Path]:
         """
         Discover project source files to include in the Olive context.
 
@@ -310,6 +310,16 @@ class OliveContext:
             explicit = root / p
             if explicit.exists() and explicit.is_file():
                 found.add(explicit.relative_to(root))
+
+        # EXTRA: Add extra files from context if requested
+        if include_extra_files:
+            for cf in self.state.extra_files:
+                try:
+                    extra_path = Path(cf.path)
+                    rel_extra = extra_path.relative_to(root) if extra_path.is_absolute() else Path(cf.path)
+                except Exception:
+                    rel_extra = Path(cf.path)
+                found.add(rel_extra)
 
         logger.info(
             f"Discovered {len(found)} context files (from {files_considered} scanned)."
