@@ -16,6 +16,8 @@
 ---
 
 ## 1. Builder Mode & Specs
+
+- When initializing, Olive copies files from `~/.olive` into the project `.olive/` only if the file is not already present by name. Existing files are skipped (never overwritten) and reported in the CLI. This guarantees local customization is preserved.
 - [ ] Begin all nontrivial work with a spec (FeatureSpec) including title, description, acceptance criteria, and ordered subtasks.
 - [ ] Only act on the currently active spec.
 - [ ] Update spec progress and comments in real time.
@@ -58,7 +60,7 @@
 
 ---
 
-## 6. Context, Preferences, File Ops
+- To extend system package support in the sandbox, use `sandbox.environment.base_apt_packages` (string or list) in `.olive/preferences.yml`. Olive will inject these at build-time, preserving Dockerfile best practices.
 - [ ] Access context and preferences only via OliveContext and Preferences public APIs.
 - [ ] Utilities must allow injected context/preferences for testing.
 - [ ] Prevent global state leakage between tests; always reset or teardown.

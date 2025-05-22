@@ -133,7 +133,7 @@ class LLMProvider:
         self,
         prompt: str,
         _depth: int = 0,
-        _max_depth: int = 8,  # recursion guard
+        _max_depth: int = 128,  # recursion guard
         _retries: int = 2,  # shared retry budget for recoverable errors
         _retry_delay: float = 2.0,  # initial back‑off seconds
     ):

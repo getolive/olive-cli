@@ -1,87 +1,109 @@
 import pytest
+import subprocess
+from pathlib import Path
 
+
+# ───────────────────────────────────────────────────────────────
+#  Session-level project root (one per pytest run)
+# ───────────────────────────────────────────────────────────────
 @pytest.fixture(scope="session", autouse=True)
 def set_olive_project_root_early(tmp_path_factory):
-    # Create a dedicated session temp directory and set Olive project root
+    """
+    Create a dedicated temp directory, initialise an empty Git repo and
+    tell Olive this is the project root for *all* tests.
+    """
     test_root = tmp_path_factory.mktemp("olive_session_root")
+
+    # real-world invariant: Olive insists on being inside a Git work-tree
+    subprocess.run(["git", "init", "-q", str(test_root)], check=True)
+    subprocess.run(['git', '-C', str(test_root), 'config', 'user.email', 'olive-test@example.com'], check=True)
+    subprocess.run(['git', '-C', str(test_root), 'config', 'user.name', 'Olive Test'], check=True)
+    subprocess.run(
+        ["git", "-C", str(test_root), "commit", "--allow-empty", "-m", "test-root"],
+        check=True,
+    )
+
     from olive.env import set_project_root
+
     set_project_root(test_root)
     return test_root
 
 
+# ───────────────────────────────────────────────────────────────
+#  Specs dir redirect (per-test)
+# ───────────────────────────────────────────────────────────────
 @pytest.fixture(autouse=True)
 def patch_specs_dir(monkeypatch, tmp_path):
-    """Globally patch get_specs_dir for all tests to use a temp directory."""
+    """Force specs storage into a temp dir so tests never pollute ~/.olive."""
     from olive.canonicals.spec import storage
 
     monkeypatch.setattr(storage, "get_specs_dir", lambda: tmp_path)
 
 
+# ───────────────────────────────────────────────────────────────
+#  Task manager + context reset helpers (unchanged)
+# ───────────────────────────────────────────────────────────────
 @pytest.fixture
 def reset_task_manager():
     from olive.tasks import task_manager
 
     old_tasks = dict(getattr(task_manager, "_tasks", {}))
-    if hasattr(task_manager, "_tasks"):
-        task_manager._tasks.clear()
+    task_manager._tasks.clear()
     yield
-    if hasattr(task_manager, "_tasks"):
-        task_manager._tasks.clear()
-        task_manager._tasks.update(old_tasks)
+    task_manager._tasks.clear()
+    task_manager._tasks.update(old_tasks)
 
 
 @pytest.fixture
 def reset_olive_context():
-    from olive.context import OliveContext
+    from olive.context import context
 
-    ctx = OliveContext()
-    _ = ctx.to_dict()
-    ctx.reset()  # Clear to default state
+    _ = context.to_dict()  # materialise
+    context.reset()
     try:
         yield
     finally:
-        ctx.reset()  # Clear again after test
+        context.reset()
 
 
-def _olive_is_initted():
-    from olive.env import get_dot_olive
 
-    dot_olive = get_dot_olive()
-    return dot_olive.exists() and dot_olive.is_dir()
-
-
+# ───────────────────────────────────────────────────────────────
+#  Initialise Olive once per session
+# ───────────────────────────────────────────────────────────────
 @pytest.fixture(autouse=True, scope="session")
-def ensure_olive_initted():
+def ensure_olive_initted(set_olive_project_root_early):
     """
-    Ensure Olive is initialized (.olive exists) before running tests.
-    If already initialized, do nothing. If missing, initialize using Olive's API.
+    Run Olive bootstrap against the pre-created session root if not already
+    done.  Uses the *path* arg so Git check is relaxed (though we did init).
     """
-    if not _olive_is_initted():
-        from olive.init import initialize_olive
+    from olive.init import initialize_olive
 
-        initialize_olive()
+    initialize_olive(set_olive_project_root_early)
 
+
+# ───────────────────────────────────────────────────────────────
+#  Per-test sandbox: isolated project root + context
+# ───────────────────────────────────────────────────────────────
 @pytest.fixture
 def isolated_olive_context(monkeypatch, tmp_path):
-    from pathlib import Path
+    """
+    Each test gets its own clean .olive workspace + context singleton.
+    """
     import olive.env
     import olive.context
 
-    # Save the original project root
-    orig_project_root = getattr(olive.env, "_PROJECT_ROOT", None)
+    # 1 · make the temp dir a Git work-tree
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+
+    # 2 - point olive at it
     olive.env._PROJECT_ROOT = tmp_path.resolve()
     monkeypatch.setattr(olive.env, "get_dot_olive", lambda: tmp_path / ".olive")
 
-    # Re-instantiate the context singleton to use the new project root
+    # fresh context singleton wired to that root
     olive.context.context = olive.context.OliveContext()
 
     yield tmp_path
 
-    # Restore the original project root and context singleton after the test
-    if orig_project_root is not None:
-        olive.env._PROJECT_ROOT = orig_project_root
-    else:
-        olive.env._PROJECT_ROOT = Path.cwd().resolve()
+    # tear-down: restore global defaults
+    olive.env._PROJECT_ROOT = Path.cwd().resolve()
     olive.context.context = olive.context.OliveContext()
-
-

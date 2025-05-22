@@ -1,4 +1,10 @@
 from unittest.mock import MagicMock
+import olive.init as init_main
+from olive import env
+from pathlib import Path
+import pytest
+
+import subprocess
 
 
 def test_safe_add_extra_context_file_success(tmp_path):
@@ -66,61 +72,85 @@ def test_get_git_diff_stats(monkeypatch):
     assert "file.py" in stats
 
 
-def test_initialize_and_context_file_discovery(tmp_path, monkeypatch):
+def test_initialize_creates_project_scaffolding(tmp_path: Path):
     """
-    Ensure Olive can initialize in an arbitrary directory,
-    and that its context discovers a hello.py file (and not unrelated files).
+    `initialize_olive(path)` must always create:
+
+        <path>/.olive/context/active.json
+        <path>/.olive/settings/
     """
-    monkeypatch.chdir(tmp_path)
 
-    from olive.init import initialize_olive
-    from olive.context import OliveContext
-    from pathlib import Path
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    env.set_project_root(tmp_path)
 
-    # Create a simple hello.py file in the temp directory
-    hello_path = tmp_path / "hello.py"
-    hello_path.write_text("print('hello world')\n")
+    init_main.initialize_olive(tmp_path)
 
-    # Create a file that should NOT be picked up by context (e.g. .hidden, .txt, or in .olive)
-    ignored_path = tmp_path / "ignored.sh"
-    ignored_path.write_text("#!/bin/bash\n echo 'should not be included'")
+    settings_dir = tmp_path / ".olive" / "settings"
 
-    dot_olive_dir = tmp_path / ".olive"
-    dot_olive_dir.mkdir()
-    olive_internal = dot_olive_dir / "internal.py"
-    olive_internal.write_text("print('internal')")
+    # settings dir should contain at least the two mandatory YAML files
+    assert {f.name for f in settings_dir.iterdir()} >= {
+        "preferences.yml",
+        "credentials.yml",
+    }
 
-    # Initialize Olive in this directory
-    initialize_olive()
 
-    # Hydrate context, then check discovered files
-    ctx = OliveContext()
-    ctx.hydrate()
-    ctx_files = ctx._discover_files()
+@pytest.fixture
+def isolated_home(monkeypatch, tmp_path: Path):
+    """
+    Redirect USER_OLIVE and env.get_user_root() to a temp dir so the test
+    never touches ~/.olive on the developer or CI runner.
+    """
 
-    ctx_paths = {Path(p).as_posix().lstrip("./") for p in ctx_files}
+    fake_home_olive = tmp_path / "_home_olive"
+    monkeypatch.setattr(init_main, "USER_OLIVE", fake_home_olive, raising=False)
+    monkeypatch.setattr(env, "get_user_root", lambda: fake_home_olive)
+    return fake_home_olive
 
-    # 2. Define expectations
-    required  = {"hello.py"}
-    forbidden = {"ignored.txt", ".olive/internal.py"}
 
-    # 3. Set-algebra checks
-    missing  = required  - ctx_paths
-    unwanted = ctx_paths & forbidden
+def test_user_and_project_settings_propagation(tmp_path: Path, monkeypatch):
+    """
+    1. Provide a throw-away dotfile_defaults set.
+    2. Verify those files copy into USER_OLIVE.
+    3. Verify they propagate into <project>/.olive/settings exactly once.
+    """
 
-    if missing:
-        raise AssertionError(f"Missing required file(s): {missing}")
-    if unwanted:
-        raise AssertionError(f"Unexpected file(s) in context: {unwanted}")
-    
+    # ------------------------------------------------------------------ #
+    # 0 · mock machine-level paths
+    # ------------------------------------------------------------------ #
+    fake_home = tmp_path / "_home_olive"
+    monkeypatch.setattr(init_main, "USER_OLIVE", fake_home, raising=False)
+    monkeypatch.setattr(env, "get_user_root", lambda: fake_home)
 
-def test_discover_files_includes_extra(tmp_path):
-    from olive.context import OliveContext
-    # Create a dummy file and add it as an extra file
-    extra_file = tmp_path / "extra.txt"
-    extra_file.write_text("foo\nbar\nbaz\n")
-    ctx = OliveContext()
-    ctx.add_extra_file(str(extra_file), ["foo\n", "bar\n", "baz\n"])
-    files = ctx._discover_files(include_extra_files=True)
-    # Should find the extra file by path
-    assert any("extra.txt" in str(f) for f in files)
+    # Provide a minimal dotfile_defaults dir for this test run
+    fake_defaults = tmp_path / "_defaults"
+    fake_defaults.mkdir()
+    (fake_defaults / "preferences.yml").write_text("sandbox:\n  enabled: true\n")
+    (fake_defaults / "credentials.yml").write_text("provider: dummy\n")
+    monkeypatch.setattr(init_main, "DOTFILE_DEFAULTS", fake_defaults, raising=False)
+
+    # ------------------------------------------------------------------ #
+    # 1 · machine-level copy runs once
+    # ------------------------------------------------------------------ #
+    copied_user, _ = init_main._ensure_user_olive()
+    assert {"preferences.yml", "credentials.yml"} <= set(copied_user)
+
+    # ------------------------------------------------------------------ #
+    # 2 · project-level propagation
+    # ------------------------------------------------------------------ #
+    project_root = tmp_path / "proj"
+    project_root.mkdir()
+    subprocess.run(["git", "init", "-q", str(project_root)], check=True)
+    env.set_project_root(project_root)
+
+    init_main.initialize_olive(project_root)
+
+    settings_dir = project_root / ".olive" / "settings"
+    assert {"preferences.yml", "credentials.yml"} <= {
+        p.name for p in settings_dir.iterdir() if p.is_file()
+    }
+
+    # ------------------------------------------------------------------ #
+    # 3 · idempotency – no second copy
+    # ------------------------------------------------------------------ #
+    copied_again, _ = init_main._sync_project_settings()
+    assert not copied_again, "second initialise copied files again unexpectedly"

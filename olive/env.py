@@ -24,7 +24,8 @@ import uuid
 from pathlib import Path
 from threading import Lock
 from typing import Optional
-#from olive.prompt_ui import olive_management_command
+from functools import lru_cache
+
 
 # ──────────────────────────────────────────────────────────────
 # internal state
@@ -175,6 +176,17 @@ def get_result_file(result_id: str) -> Path:
 # ──────────────────────────────────────────────────────────────
 # misc helpers (unchanged behaviour)
 # ──────────────────────────────────────────────────────────────
+@lru_cache(maxsize=None)
+def is_in_sandbox() -> bool:
+    """
+    True when code executes inside the Olive Docker sandbox, False on the host.
+
+    We rely on an invariant environment variable set in the Docker image *and*
+    injected by `docker run` so the flag survives copy-mode vs mount-mode,
+    multi-stage builds, etc.
+    """
+    return os.getenv("IS_OLIVE_SANDBOX") == "1"
+
 def is_git_dirty() -> bool:
     from olive.context.utils import get_git_diff_stats
 

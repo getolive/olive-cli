@@ -4,7 +4,6 @@ import os
 import signal
 import subprocess
 import sys
-from olive.canonicals import CanonicalRegistry
 import typer
 
 from olive.context import context
@@ -41,36 +40,42 @@ def init():
 
 
 @app.command()
-def shell():
-    """Start the Olive shell interactively or execute a one-off command via `-c`."""
+def shell() -> None:
+    """
+    Launch the interactive Olive shell (or execute `-c` one-off commands).
+
+    Uses the *new* bootstrap routine so the working directory is always a
+    fully-initialised Olive workspace before any REPL logic starts.
+    """
+    import asyncio
+
+    from olive.init import initialize_olive
     from olive.logger import get_logger
     from olive.preferences.admin import get_prefs_lazy
     from olive.sandbox import SandboxManager
 
+    # 1. Initialise (fatal on mis-configuration)
+    initialize_olive()  # cwd, enforces Git repo & prefs
+
     logger = get_logger()
     prefs = get_prefs_lazy()
 
-    Canonicals = CanonicalRegistry()
-    Canonicals.discover_all(install=True)
-    from olive.tools import tool_registry
-
-    tool_registry.discover_all(install=True)
-
+    # 2. Enter REPL
     try:
-        import asyncio
-
         asyncio.run(run_interactive_shell())
     except KeyboardInterrupt:
         print("\n[Olive] Exiting shell (KeyboardInterrupt).")
-        # Clean up: stop sandbox if running, flush logs, exit gracefully
-        try:
-            if prefs.is_sandbox_enabled():
-                sbx = SandboxManager()
-                if sbx.is_running():
-                    sbx.stop()
-        except Exception as e:
-            logger.warning(f"[Olive] Exception during sandbox cleanup: {e}")
-        sys.exit(0)
+
+    # 3. Tidy-up
+    try:
+        if prefs.is_sandbox_enabled():
+            sbx = SandboxManager()
+            if sbx.is_running():
+                sbx.stop()
+    except Exception as exc:  # pragma: no cover
+        logger.warning("[Olive] Exception during sandbox cleanup: %s", exc)
+
+    sys.exit(0)
 
 
 def context_command():
@@ -229,6 +234,7 @@ def ask_command(
     except Exception as exc:  # noqa: BLE001
         # graceful degradation – echo back
         typer.echo(f"[stub] You said: {prompt} • (ask unavailable: {exc})")
+
 
 # ---------------------------------------------------------------------
 # Serve HTTP

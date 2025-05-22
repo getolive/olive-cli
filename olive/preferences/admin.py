@@ -15,7 +15,6 @@ logger = get_logger(__name__)
 
 def get_prefs_lazy():
     from olive.preferences import prefs
-
     return prefs
 
 

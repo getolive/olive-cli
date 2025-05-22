@@ -1,234 +1,347 @@
-# cli/olive/init.py
-import json
-import subprocess
-from pathlib import Path
+"""
+olive.init – project boot‑strapper for Olive CLI
+===============================================
+This module is the single canonical place responsible for **creating**,
+**validating** and **displaying** the state of an Olive installation.
 
-import olive.canonicals.admin  # Register CLI commands # type: ignore
-import olive.context.admin  # Register CLI commands # type: ignore
-import olive.sandbox.admin  # Register CLI commands # type: ignore
-import olive.tasks.admin  # Register CLI commands # type: ignore
-from olive.canonicals import canonicals_registry
-from olive.context import context
-from olive import env
-from olive.logger import get_logger
-from olive.preferences.admin import get_prefs_lazy, prefs_show_summary
-from olive.tools import tool_registry
-from olive.tools.admin import tools_summary_command
-from olive.ui import console, print_info, print_error, print_success, print_warning
+It fulfils six key requirements (see PR‑spec):
+
+1. `initialize_olive(path: str | Path | None = None)` may be invoked from
+   any working directory or test harness to bootstrap Olive in *path*.
+2. Ensures **machine‑level** config at *~/.olive* by copying bundled
+   `dotfile_defaults/*` once. Prompts the user to edit
+   `credentials.yml` and `preferences.yml` if they are brand‑new.
+3. Creates / refreshes **project‑level** config at
+   `<project_root>/.olive` including a **settings/** folder that shadows
+   `~/.olive` for per‑project overrides.
+4. Exposes two public, dependency‑free helpers – `initialize_olive()` and
+   `validate_olive()` – suitable for CLI entrypoints *and* isolated unit
+   tests (call inside a `tmp_path`).
+5. Performs rigorous validation (Git repo, prefs, context etc.) and
+   raises or exits cleanly with actionable Rich messages.
+6. Presents a minimal, information‑dense TUI summary after init / shell
+   start‑up so operators instantly know the health of their Olive.
+
+The implementation keeps backwards compatibility with the previous API
+so existing CLI commands (`olive init`, `olive shell` …) keep working
+unchanged.
+"""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import List, Sequence, Tuple
+
+from rich.table import Table
 from rich.tree import Tree
+
+from olive import env
+import olive.canonicals.admin  # noqaF401 side‑effect: register CLI commands  # type: ignore
+import olive.context.admin  # noqa:F401 side‑effect: register CLI commands
+import olive.sandbox.admin  # noqa:F401 side‑effect: register CLI commands
+import olive.tasks.admin  # noqa:F401 side‑effect: register CLI commands
+
+from olive.context import context
+from olive.canonicals import canonicals_registry
+from olive.logger import get_logger
+from olive.preferences.admin import prefs_show_summary
+from olive.tools import tool_registry
+from olive.ui import console, print_error, print_info, print_warning
+
+__all__ = [
+    "initialize_olive",
+    "initialize_shell_session",
+    "validate_olive",
+]
 
 logger = get_logger(__name__)
 
-
-def load_system_prompt(prefs) -> str:
-    """Load the system prompt from a path specified in prefs, or fallback to default."""
-    prompt_path = Path(
-        prefs.get(
-            "context", "system_prompt_path", default="~/.olive/my_system_prompt.txt"
-        )
-    ).expanduser()
-
-    if prompt_path.exists():
-        logger.info(f"Loaded system prompt from {prompt_path}")
-        return prompt_path.read_text()
-
-    logger.warning("Using fallback system prompt")
-    return (
-        "You are Olive — a local-first, developer-facing, intelligent CLI agent. You are being used by your creator to build and improve yourself. "
-        "You operate entirely on the user's machine and respect privacy by default. You do not assume cloud access unless explicitly configured. Your mission is to help your user manage time, coordinate tasks, build systems, and create leverage — starting with yourself. "
-        "You live inside a Typer-based CLI application. You use context files, preferences, and user instructions to interact intelligently. "
-        "This is your context. Build wisely. Collaborate deeply. Minimize friction. Maximize momentum."
-    )
+# ---------------------------------------------------------------------------
+# Low‑level helpers
+# ---------------------------------------------------------------------------
 
 
-def validate_git_repo():
+def _git_is_repo(path: Path) -> bool:
+    """Return *True* if *path* (or any parent) is a Git repo."""
     try:
         subprocess.run(
-            ["git", "rev-parse", "--is-inside-work-tree"],
+            ["git", "-C", str(path), "rev-parse", "--is-inside-work-tree"],
             check=True,
             capture_output=True,
         )
-        logger.info("Git repository detected")
         return True
     except subprocess.CalledProcessError:
-        print_error("Olive requires a Git repository.")
-        print_info("Please run `git init` and try again.")
-        logger.error("Git repository not found.")
         return False
 
 
-def ensure_directories():
-    base = env.get_dot_olive()
-    for sub in ["logs", "context", "canonicals", "providers", "state"]:
-        (base / sub).mkdir(parents=True, exist_ok=True)
-    logger.info("Required directories ensured")
-
-
-def ensure_context_initialized(prefs):
-    context_path = env.get_dot_olive() / "context" / "active.json"
-    if not context_path.exists():
-        context = {
-            "system_prompt": load_system_prompt(prefs),
-            "chat": [],
-            "files": [],
-            "metadata": {},
-        }
-        context_path.write_text(json.dumps(context, indent=2))
-        logger.info("Created new .olive/context/active.json")
+def _copy_tree(src: Path, dst: Path) -> None:
+    """Recursively copy *src* → *dst*; never overwrites existing files."""
+    if src.is_dir():
+        dst.mkdir(parents=True, exist_ok=True)  # ensure empty dirs survive
+        for item in src.iterdir():
+            _copy_tree(item, dst / item.name)
     else:
-        logger.info("Using existing .olive/context/active.json")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if not dst.exists():
+            shutil.copy2(src, dst)
 
 
-def discover_components():
-    try:
-        canonicals_registry.discover_all(install=True)
-        logger.info("Canonicals discovered and installed")
-    except Exception as e:
-        logger.warning(f"Canonicals discovery failed: {e}")
+# ---------------------------------------------------------------------------
+# Machine‑level (~/.olive) bootstrap
+# ---------------------------------------------------------------------------
 
-    try:
-        tool_registry.discover_all(install=True)
-        logger.info("Tools discovered and installed")
-    except Exception as e:
-        logger.warning(f"Tools discovery failed: {e}")
+DOTFILE_DEFAULTS = env.get_resource_path("olive", "dotfile_defaults")
+USER_OLIVE = env.get_user_root()
+MANDATORY_DOTFILES: Sequence[str] = ("credentials.yml", "preferences.yml")
 
 
-def start_sandbox_if_enabled(prefs) -> bool:
-    if prefs.is_sandbox_enabled():
-        try:
-            olive.sandbox.admin.sandbox_start_command()
-            logger.info("Sandbox started")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to start sandbox: {e}")
-            print_error("Failed to start sandbox — exiting shell.")
-            raise SystemExit(1)
-    else:
-        return False
+def _ensure_user_olive() -> Tuple[List[str], List[str]]:
+    """Ensure *~/.olive* exists and is populated from *dotfile_defaults*.
+
+    Returns a tuple ``(copied, skipped)`` with base‑name strings for UX
+    reporting.
+    """
+    copied: List[str] = []
+    skipped: List[str] = []
+
+    USER_OLIVE.mkdir(parents=True, exist_ok=True)
+
+    for item in DOTFILE_DEFAULTS.glob("*"):
+        target = USER_OLIVE / item.name
+        if target.exists():
+            skipped.append(item.name)
+            continue
+        _copy_tree(item, target)
+        copied.append(item.name + ("/" if item.is_dir() else ""))
+    return copied, skipped
 
 
-def initialize_shell_session():
-    from olive.env import generate_session_id, get_session_id
+# ---------------------------------------------------------------------------
+# Project‑level (.olive) bootstrap
+# ---------------------------------------------------------------------------
 
-    generate_session_id()
+PROJECT_SUBDIRS: Sequence[str] = (
+    "logs",
+    "state",
+    "specs",
+    "context",
+    "canonicals",
+    "providers",
+    "settings",  # ← per‑project overrides live here
+)
 
-    console.print("[bold green]🌱 Welcome to Olive Shell[/bold green]\n")
 
+def _sync_project_settings() -> Tuple[List[str], List[str]]:
+    """Sync *~/.olive/* into *project_root/.olive/settings/* once.
+
+    Only copies files that do **not** already exist in the destination
+    so local changes are never overwritten.
+    """
+    copied: List[str] = []
+    skipped: List[str] = []
+
+    proj_settings = env.get_dot_olive() / "settings"
+    proj_settings.mkdir(parents=True, exist_ok=True)
+
+    for item in USER_OLIVE.glob("*"):
+        if item.is_dir() or item.name == "settings":
+            continue
+        dst = proj_settings / item.name
+        if dst.exists():
+            skipped.append(item.name)
+            continue
+        _copy_tree(item, dst)
+        copied.append(item.name + ("/" if item.is_dir() else ""))
+    return copied, skipped
+
+
+# ---------------------------------------------------------------------------
+# Validation helpers
+# ---------------------------------------------------------------------------
+
+
+def _require_prefs() -> None:
+    """
+    Abort if **neither**
+        ~/.olive/preferences.yml     nor
+        .olive/settings/preferences.yml
+    exists.  (Content validity is checked later by the prefs subsystem.)
+    """
+    user_pref = USER_OLIVE / "preferences.yml"
+    proj_pref = env.get_dot_olive() / "settings" / "preferences.yml"
+
+    if user_pref.exists() or proj_pref.exists():
+        return
+
+    print_error("Olive requires a preferences.yml to function.")
+    print_info(
+        "Create *preferences.yml* either in ~/.olive or .olive/settings "
+        "and rerun `olive init`."
+    )
+    sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Rich UI helpers
+# ---------------------------------------------------------------------------
+
+
+def _render_summary(
+    project_root: Path, copied_user: Sequence[str], copied_proj: Sequence[str]
+) -> None:
+    """Pretty TUI after initialisation / validation."""
+    tree = Tree(f"Initialized Olive @ [bold]{project_root}[/]")
+
+    # ── dotfiles
+    dot = tree.add("[bold cyan]~/.olive[/]")
+    dot.add(f"[green]copied[/]: {', '.join(copied_user) or '–'}")
+
+    # ── project .olive
+    proj = tree.add("[bold cyan].olive[/]")
+    proj.add(f"sub‑dirs: {', '.join(PROJECT_SUBDIRS)}")
+    proj.add(f"settings copied: {', '.join(copied_proj) or '–'}")
+
+    console.print(tree)
     prefs_show_summary()
 
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def initialize_olive(path: str | Path | None = None) -> None:
+    """Bootstrap or re‑hydrate an Olive installation.
+
+    Parameters
+    ----------
+    path
+        Optional project root. Defaults to the *current working
+        directory* as resolved by :pyfunc:`Path.cwd`.
+    """
+    project_root = Path(path).expanduser().resolve() if path else Path.cwd().resolve()
+    env.set_project_root(project_root)  # make globally visible early
+
+    # 1. Git guard – fail‑fast so users know to `git init`.
+    if not _git_is_repo(project_root):
+        print_error("Olive requires a Git repository (run `git init`).")
+        sys.exit(1)
+
+    # 2. Machine‑level bootstrap
+    copied_user, _skipped_user = _ensure_user_olive()
+
+    # 3. Project‑level bootstrap
+    dot_olive = env.get_dot_olive()
+    for sub in PROJECT_SUBDIRS:
+        (dot_olive / sub).mkdir(parents=True, exist_ok=True)
+
+    copied_proj, _skipped_proj = _sync_project_settings()
+
+    # 4. First‑run hint for creds & prefs
+    for mandatory in MANDATORY_DOTFILES:
+        if mandatory in copied_user:
+            print_warning(f"Edit `~/.olive/{mandatory}` with provider credentials.")
+        elif mandatory in copied_proj:
+            print_warning(f"Edit `.olive/settings/{mandatory}` for project overrides.")
+
+    # 5. Hydrate runtime context & discover dynamic components
+    context.hydrate()
+    canonicals_registry.discover_all(install=True)
+    tool_registry.discover_all(install=True)
+
+    # 6. Validation
+    _require_prefs()
+
+    # 7. Nice summary
+    _render_summary(project_root, copied_user, copied_proj)
+
+    logger.info("Olive initialisation complete.")
+
+
+def validate_olive(path: str | Path | None = None) -> None:
+    """Run a lightweight health‑check without modifying on‑disk state."""
+    project_root = Path(path).expanduser().resolve() if path else Path.cwd().resolve()
+
+    if not _git_is_repo(project_root):
+        print_error("Not a Git repository – cannot validate Olive here.")
+        sys.exit(1)
+
+    dot_olive = project_root / ".olive"
+    if not dot_olive.exists():
+        print_error("No .olive directory found – did you run `olive init`?")
+        sys.exit(1)
+
+    # prefs & context
+    _require_prefs()
+
+    # quick component listing
+    n_tools = len(tool_registry.list())
+    n_canon = len(canonicals_registry.list())
+
+    table = Table(
+        title="Olive Health‑check", show_header=True, header_style="bold blue"
+    )
+    table.add_column("Check")
+    table.add_column("Status", justify="center")
+
+    table.add_row("Git repository", "✅")
+    table.add_row(".olive present", "✅")
+    table.add_row("Tools discovered", f"{n_tools} 🛠️")
+    table.add_row("Canonicals discovered", f"{n_canon} 📄")
+
+    console.print(table)
+    logger.info("Olive validation finished OK.")
+
+
+# ---------------------------------------------------------------------------
+# Interactive-shell bootstrap
+# ---------------------------------------------------------------------------
+
+
+def initialize_shell_session() -> None:
+    """
+    Emit the Rich welcome banner, preference summary, tool inventory and—
+    if enabled—start / display the Docker sandbox session ID.  Used by the
+    `olive shell` command and unit-tests.
+    """
+    from olive.env import generate_session_id, get_session_id, is_git_dirty
+    from olive.preferences.admin import get_prefs_lazy
+    from olive.sandbox import sandbox
+
+    # fresh session ID for every shell
+    generate_session_id()
+    console.print("[bold green]🌱 Welcome to Olive Shell[/bold green]\n")
+
+    # tool inventory
     tools = tool_registry.list()
     n_tools = len(tools)
-    parent_label = f"Olive has access to {n_tools} tool{'s' if n_tools != 1 else ''}"
-    tool_tree = Tree(parent_label, guide_style="bold cyan")
-
+    parent = f"Olive has access to {n_tools} tool{'s' if n_tools != 1 else ''}"
+    tree = Tree(parent, guide_style="bold cyan")
     for entry in tools:
-        tool_name = f"[bold]{entry.tool.name}[/bold]"
+        name = f"[bold]{entry.tool.name}[/bold]"
         desc = (entry.tool.description or "").splitlines()[0]
         if len(desc) > 80:
-            desc = desc[:80] + " [...]"
-        tool_tree.add(f"{tool_name}: {desc}")
+            desc = desc[:80] + " […]"
+        tree.add(f"{name}: {desc}")
+    console.print(tree)
 
-    console.print(tool_tree)
-    if env.is_git_dirty():
+    # git-dirty hint
+    if is_git_dirty():
         print_info(
-            "\nFYI: your git repo is dirty (uncommitted changes detected, you can run !git diff from shell to review))\n"
+            "\nFYI: your Git repo has uncommitted changes "
+            "(run !git diff from the shell to review).\n"
         )
 
+    # optional sandbox spin-up
     prefs = get_prefs_lazy()
-    sandbox_started = start_sandbox_if_enabled(prefs)
-    if sandbox_started:
+    if prefs.is_sandbox_enabled():
+        if not sandbox.is_running():
+            try:
+                sandbox.start()
+            except Exception as exc:
+                print_error(f"Failed to start sandbox: {exc}")
+                return
         console.print(f"[dim]sandbox session: {get_session_id()}[/dim]\n")
-
-
-def validate_olive():
-    """Validates user/project Olive configuration and context."""
-    try:
-        initialize_olive()
-        print_success("Olive has been initialized\n")
-    except Exception as e:
-        print_error(f"Olive failed to initialize. [dim]{str(e)}[/dim]")
-        logger.exception("Initialization failed")
-        return
-
-    user_path = Path.home() / ".olive"
-    project_path = Path(".olive")
-    gitignore_path = Path(".gitignore")
-
-    print_info("\n📂 [bold underline]User Olive Directory (~/.olive):[/bold underline]")
-    console.print(
-        f"✅ Found {user_path}"
-        if user_path.exists()
-        else "❌ Missing ~/.olive directory"
-    )
-
-    print_info(
-        "\n📁 [bold underline]Project Olive Directory (.olive):[/bold underline]"
-    )
-    if project_path.exists():
-        print_success(f"✅ Found {project_path}")
-
-        logs = project_path / "logs"
-        if logs.exists():
-            size_kb = (
-                sum(f.stat().st_size for f in logs.glob("*") if f.is_file()) / 1024
-            )
-            print_success(f"Logs present — {size_kb:.1f} KB")
-        else:
-            print_error("⚠️ Missing logs directory")
-
-        context = project_path / "context" / "active.json"
-        console.print(
-            "✅ Context loaded" if context.exists() else "⚠️ Missing active.json"
-        )
-
-        print_info("\n🔍 Canonicals:")
-        canonicals = sorted(canonicals_registry.list())
-        if canonicals:
-            for name in canonicals:
-                print_success(f"{name}")
-        else:
-            print_warning("⚠️ No canonicals found")
-
-        print_info("\n🛠️ Tools:")
-        tools_summary_command()
-    else:
-        print_error("Missing .olive directory")
-
-    print_info("\n📄 [bold underline].gitignore Checks:[/bold underline]")
-    if gitignore_path.exists():
-        lines = gitignore_path.read_text().splitlines()
-        ignored = any(".olive/" in line or ".olive/*" in line for line in lines)
-        override = any("!.olive/specs/" in line for line in lines)
-        console.print(
-            "✅ `.olive/` is ignored" if ignored else "❌ Missing `.olive/` ignore line"
-        )
-        console.print(
-            "✅ `.olive/specs/` is tracked"
-            if override
-            else "❌ Missing `!.olive/specs/` override"
-        )
-    else:
-        print_error("⚠️ No .gitignore file found")
-
-
-def initialize_olive():
-    project_root_path = Path.cwd().resolve()
-    logger.info(f"Starting Olive initialization @ {project_root_path}")
-    env.set_project_root(project_root_path)
-
-    if not validate_git_repo():
-        return
-
-    prefs = get_prefs_lazy()
-    if not prefs.initialized:
-        print_error("Olive requires a preferences.yml to function.")
-        print_info("Please create ~/.olive/preferences.yml and retry.")
-        logger.error("Preferences not initialized.")
-        return
-
-    ensure_directories()
-    context.hydrate()
-    discover_components()
-
-    print_success("Initialized Olive in .olive/")
-    logger.info("Initialization complete.")

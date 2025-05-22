@@ -8,14 +8,24 @@ uv pip install "git+https://github.com/getolive/olive-cli.git"
 
 # install (recommended, PEP508 with all optionals included)
 uv pip install "olive[dev,http,syntax] @ git+https://github.com/getolive/olive-cli.git"
+```
 
-# initialize (git is required, olive uses it for managing code changes
+# initialization (git is required, olive uses it for managing code changes)
+
+During initialization, Olive copies files from `~/.olive` into your project's `.olive` directory, but only if the file does not already exist by name. Existing files are never overwritten: they are skipped and listed in a report message after initialization. This ensures your project-local customizations are always preserved.
+
+```bash
 git init
 olive init
-olive shell # the repl 
+olive shell # the repl
+```
 
-# dependencies:
-# POSIX host, docker (if using sandbox support), astral's uv, python >3.11
+## dependencies:
+```
+POSIX host
+docker (if using sandbox support)
+astral's uv
+python >3.11
 ```
 
 **Olive CLI** is designed for engineers who prefer to work with AI as a tool/utility - with fine-grained control, customizability, and interop with existing standard tooling (like your shell, tmux, docker/podman, ollama, logging). It runs entirely on your machine (or optionally via OpenAI API-compatible cloud providers), optionally treating tasks as structured **Spec** objects (with clear objectives, checklists, context, and progress) instead of an open-ended chat. By using local models when available and real developer tools (files, shell, Git, Docker), Olive emphasizes transparency, reproducibility, and privacy over cloud-dependent or editor-locked solutions.
@@ -141,7 +151,21 @@ All input is processed in context: meta-commands and shell commands are executed
 
 You can always type natural language requests to Olive in the shell. For example, “Explain the design of the authentication module” or “Add a unit test for the `UserService` class.” Olive will process the request using the context of your project and either just answer (for explain-style queries) or create a Spec and start implementing (for development tasks).
 
-## Core Concepts
+## Project-specific Sandbox System Packages
+
+Set `sandbox.environment.extra_apt_packages` in your `.olive/settings/preferences.yml` (string or list) to inject additional apt packages into the sandbox Dockerfile’s base layer.
+
+Example:
+```yaml
+sandbox:
+  environment:
+    extra_apt_packages:
+      - vim
+      - htop
+```
+
+This enables per-project system dependency management for Olive sandboxes.
+
 
 - **Spec:** A *Spec* is an executable work unit (task) encapsulating what you want to achieve. It has a name, an optional description, and a checklist of sub-tasks or acceptance criteria. Olive represents Specs as files (YAML in `specs/` for persistent specs, or JSON in `run/tasks/` for active ones). Think of a Spec like a lightweight issue or story that the AI can help implement. Specs can be created by you (e.g. via `olive new-spec`) or by Olive itself when you give it a high-level instruction. By tracking Specs in Git, you can review how a feature was implemented or even revert a spec execution.
 

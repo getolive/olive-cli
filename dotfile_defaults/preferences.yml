@@ -12,7 +12,7 @@ ai:
 builder_mode:
   autonomy: yolo
   confidence_threshold: 0.7
-  prompt_path: ~/.olive/builder_mode_prompt.txt
+  prompt_path: .olive/builder_mode_prompt.txt
   editor: nvim
 code_smells:
   enabled: true
@@ -45,6 +45,7 @@ context:
   include:
     paths:
     - pyproject.toml
+    - olive/sandbox/Dockerfile.template
     patterns:
     - '*.html'
     - '*.js'
@@ -54,14 +55,18 @@ context:
     - '*.md'
     - README*
     - Makefile
-    - Dockerfile
+    - Dockerfile.template
   max_files: -1
   max_lines_per_file: 1000
   max_tokens: 85000
   respect_gitignore: true
-  system_prompt_path: ~/.olive/my_system_prompt.txt
+  system_prompt_path: .olive/my_system_prompt.txt
 sandbox:
-  disk: mount
   enabled: true
+  disk: mount
+  environment:
+    extra_apt_packages:
+    # - cowsay  # Uncomment to add apt packages for the sandbox Dockerfile
+
 ui:
   prompt: "\U0001FAD2"

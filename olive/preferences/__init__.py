@@ -1,20 +1,30 @@
 # cli/olive/preferences/__init__.py
-from pathlib import Path
 from typing import Any
+from olive import env
 
 import yaml
 
 
 class Preferences:
     def __init__(self):
-        self.prefs = self.load_preferences()
-        self.initialized: bool = bool(self.prefs)
+        self.prefs: dict = {}
+        self.initialized: bool = False
+        self._ensure_loaded() # lazy-load on initial import
 
     def get_preferences_path(self):
-        prefs_path = Path.home() / ".olive" / "preferences.yml"
+        prefs_path = env.get_dot_olive() / "settings" / "preferences.yml"
         return prefs_path, prefs_path.exists()
 
-    def load_preferences(self):
+    def reload(self):
+        """Force a fresh read from disk"""
+        self.prefs = self._load_preferences()
+        self.initialized = bool(self.prefs)
+
+    def _ensure_loaded(self):
+        if not self.initialized:
+            self.reload()
+
+    def _load_preferences(self):
         prefs_path, exists = self.get_preferences_path()
         if exists:
             try:
@@ -30,6 +40,7 @@ class Preferences:
         prefs_path.write_text(yaml.safe_dump(self.prefs, default_flow_style=False))
 
     def get(self, *keys: str, default: Any = None) -> Any:
+        self._ensure_loaded()
         result = self.prefs
         for key in keys:
             if not isinstance(result, dict) or key not in result:
@@ -42,6 +53,7 @@ class Preferences:
         Set a value in the nested preferences structure.
         Example: prefs.set("ui", "theme", value="dracula", save=True)
         """
+        self._ensure_loaded()
         if not keys:
             raise ValueError("prefs.set() requires at least one key")
 
@@ -57,6 +69,9 @@ class Preferences:
 
     def is_sandbox_enabled(self) -> bool:
         """with sandbox enabled olive's dispatcher will run commands in the sandbox instead of on the host."""
+        if env.is_in_sandbox():
+            return False
+
         return bool(self.get("sandbox", "enabled", default=False))
 
     def is_abstract_mode_enabled(self) -> bool:
