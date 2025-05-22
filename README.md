@@ -10,13 +10,14 @@ uv pip install "git+https://github.com/getolive/olive-cli.git"
 uv pip install "olive[dev,http,syntax] @ git+https://github.com/getolive/olive-cli.git"
 ```
 
-# initialization (git is required, olive uses it for managing code changes)
+# initialization
 
-During initialization, Olive copies files from `~/.olive` into your project's `.olive` directory, but only if the file does not already exist by name. Existing files are never overwritten: they are skipped and listed in a report message after initialization. This ensures your project-local customizations are always preserved.
+Olive will initialize with defaults, first from the olive's dotfile_defaults/, then from ~/.olive, and finally from .olive. This means you can customize olive down to the individual project and sandbox.
+
 
 ```bash
-git init
-olive init
+git init    # olive requires git, using git to manage branching for specs and other things.
+olive init  # creates ~/.olive if required, .olive if required, validates install is healthy.
 olive shell # the repl
 ```
 
@@ -160,8 +161,7 @@ Example:
 sandbox:
   environment:
     extra_apt_packages:
-      - vim
-      - htop
+      - cowsay  # start olive shell, then at the repl type !!shell /usr/games/cowsay moo
 ```
 
 This enables per-project system dependency management for Olive sandboxes.
@@ -174,7 +174,6 @@ This enables per-project system dependency management for Olive sandboxes.
 - **Builder Mode:** When you’re working on a specific Spec, Olive narrows the AI’s focus to that context (this is Builder Mode). The system prompt and retrieval of context are oriented around “here’s the goal we’re working on right now.” This helps reduce distractions and keeps outputs relevant to the task at hand. Builder Mode is the typical mode during an `olive shell` session – you either select an existing Spec or let Olive create one, and then iteratively work through it.
 
 - **Sandbox Mode:** In Sandbox Mode, Olive executes all shell commands inside an isolated Docker container. The container is set up using the project’s `./olive/sandbox/` directory (which can contain a Dockerfile and any context needed). When sandboxed, even if the AI tries a dangerous command (like installing packages or running a server), it won’t affect your host OS – you can monitor and terminate the tmux session if needed. This mode is useful for testing code in an environment similar to production, or simply containing side effects. If Docker or tmux is not available, this mode won’t function (Olive will warn you or fall back to host execution).
-
 - **Daemon:** The Olive daemon is a background service that loads the language model and persists context between commands. When you run `olive shell`, it will automatically start a daemon (if not already running for that project) and attach your shell to it. The daemon process allows Olive to handle multiple tasks in parallel and watch for file changes or new tasks (it can react to triggers). Communication with the daemon happens through files: when a task is dispatched, Olive writes a JSON spec to `.olive/run/tasks/<id>.json` and the daemon eventually writes the result to `<id>.result.json`. This file-based RPC ensures that even if the sandbox is being used (which might be a separate container process), the commands and results flow through a unified interface on disk. For advanced users, you can start/stop and attach to the daemon’s tmux session manually (for debugging or to see raw model output streams).
 
 - **Project Structure:** Olive keeps project-related data in a dedicated directory. By default, after `olive init`, you’ll have a structure like:
