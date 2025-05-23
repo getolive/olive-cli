@@ -62,39 +62,6 @@ https://github.com/user-attachments/assets/20f1964a-8e0d-42d0-a733-d42f6f840c57
 
 - **Configurability:** Olive’s behavior can be tuned via simple YAML configs. In `~/.olive/config.yml` you can set global preferences (like which OpenAI endpoint or local model to use, default model parameters, etc.), and per-project `.olive/config.yml` can override context inclusion rules or tool settings for that repository. Because these configs are code and text based, they can be reviewed or versioned.
 
-## Installation
-
-**Prerequisites:** Python 3.11+, and for certain features:
-- **Docker** (if you plan to use Sandbox Mode for isolation).
-- **tmux** (if you plan to use the background daemon or persistent sessions).
-- **`uv` tool** (optional, for faster isolated Python env and package installs).
-
-Olive is an early-stage project, so installation is from source:
-
-1. **Clone the repository** and create a virtual environment:
-
-   ```bash
-   git clone https://github.com/getolive/olive-cli.git && cd olive-cli
-   python3 -m venv .venv && source .venv/bin/activate   # or use `uv venv` for a quicker setup
-   ```
-
-2. **Install Python dependencies:**
-
-   ```bash
-   pip install -e .   # use -e for editable install (development mode)
-   ```
-   *Note:* If you have [`uv`](https://github.com/astral-sh/uv) you can instead run `uv pip install -e .` for an isolated and faster install.
-
-3. **Initialize an Olive project:**
-
-   ```bash
-   source .venv/bin/activate
-   olive init # (or % git init && olive init)
-   ```
-   This creates a `.olive/` directory in the current folder with the necessary subfolders (such as `specs/`, `run/`, etc.) and a default config. Each project you use Olive on should be initialized once.
-
-Now you’re ready to use Olive in that project directory.
-
 ## Quick Start
 
 Launch the interactive shell with:
@@ -166,6 +133,8 @@ sandbox:
 
 This enables per-project system dependency management for Olive sandboxes.
 
+## Modes & Tools
+
 
 - **Spec:** A *Spec* is an executable work unit (task) encapsulating what you want to achieve. It has a name, an optional description, and a checklist of sub-tasks or acceptance criteria. Olive represents Specs as files (YAML in `specs/` for persistent specs, or JSON in `run/tasks/` for active ones). Think of a Spec like a lightweight issue or story that the AI can help implement. Specs can be created by you (e.g. via `olive new-spec`) or by Olive itself when you give it a high-level instruction. By tracking Specs in Git, you can review how a feature was implemented or even revert a spec execution.
 
@@ -174,6 +143,7 @@ This enables per-project system dependency management for Olive sandboxes.
 - **Builder Mode:** When you’re working on a specific Spec, Olive narrows the AI’s focus to that context (this is Builder Mode). The system prompt and retrieval of context are oriented around “here’s the goal we’re working on right now.” This helps reduce distractions and keeps outputs relevant to the task at hand. Builder Mode is the typical mode during an `olive shell` session – you either select an existing Spec or let Olive create one, and then iteratively work through it.
 
 - **Sandbox Mode:** In Sandbox Mode, Olive executes all shell commands inside an isolated Docker container. The container is set up using the project’s `./olive/sandbox/` directory (which can contain a Dockerfile and any context needed). When sandboxed, even if the AI tries a dangerous command (like installing packages or running a server), it won’t affect your host OS – you can monitor and terminate the tmux session if needed. This mode is useful for testing code in an environment similar to production, or simply containing side effects. If Docker or tmux is not available, this mode won’t function (Olive will warn you or fall back to host execution).
+
 - **Daemon:** The Olive daemon is a background service that loads the language model and persists context between commands. When you run `olive shell`, it will automatically start a daemon (if not already running for that project) and attach your shell to it. The daemon process allows Olive to handle multiple tasks in parallel and watch for file changes or new tasks (it can react to triggers). Communication with the daemon happens through files: when a task is dispatched, Olive writes a JSON spec to `.olive/run/tasks/<id>.json` and the daemon eventually writes the result to `<id>.result.json`. This file-based RPC ensures that even if the sandbox is being used (which might be a separate container process), the commands and results flow through a unified interface on disk. For advanced users, you can start/stop and attach to the daemon’s tmux session manually (for debugging or to see raw model output streams).
 
 - **Project Structure:** Olive keeps project-related data in a dedicated directory. By default, after `olive init`, you’ll have a structure like:
@@ -216,4 +186,4 @@ Give it a try, and feel free to contribute! Standard GitHub pull requests are we
 
 ## License
 
-Olive CLI is open source under the Apache 2.0 License. © 2025 getolive.ai. This means you’re free to use and modify it, but it comes with no warranty – appropriate for an experimental tool. Happy hacking with Olive!
+Olive CLI is open source under the Apache 2.0 License. This means you’re free to use and modify it, but it comes with no warranty – appropriate for an experimental tool. Happy hacking with Olive!
