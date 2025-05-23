@@ -16,16 +16,23 @@ def set_olive_project_root_early(tmp_path_factory):
 
     # real-world invariant: Olive insists on being inside a Git work-tree
     subprocess.run(["git", "init", "-q", str(test_root)], check=True)
-    subprocess.run(['git', '-C', str(test_root), 'config', 'user.email', 'olive-test@example.com'], check=True)
-    subprocess.run(['git', '-C', str(test_root), 'config', 'user.name', 'Olive Test'], check=True)
+    subprocess.run(
+        ["git", "-C", str(test_root), "config", "user.email", "olive-test@example.com"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(test_root), "config", "user.name", "Olive Test"], check=True
+    )
     subprocess.run(
         ["git", "-C", str(test_root), "commit", "--allow-empty", "-m", "test-root"],
         check=True,
     )
 
+    from olive.init import initialize_olive
     from olive.env import set_project_root
 
     set_project_root(test_root)
+    initialize_olive(test_root)
     return test_root
 
 
@@ -64,7 +71,6 @@ def reset_olive_context():
         yield
     finally:
         context.reset()
-
 
 
 # ───────────────────────────────────────────────────────────────

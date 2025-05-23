@@ -45,6 +45,18 @@ def set_project_root(path: Path) -> None:
         new_root = path.resolve()
         if _PROJECT_ROOT != new_root:
             _PROJECT_ROOT = new_root
+            # If we’re on the host (not inside a running sandbox) and the
+            # sandbox-dir env-var points outside the *current* project root,
+            # drop it to prevent stale paths on subsequent calls.
+            custom = os.getenv("OLIVE_SANDBOX_DIR")
+            if custom and not is_in_sandbox():
+                try:
+                    custom_path = Path(custom).resolve()
+                    if _PROJECT_ROOT not in custom_path.parents:
+                        os.environ.pop("OLIVE_SANDBOX_DIR", None)
+                except (OSError, RuntimeError):
+                    # Path resolution failed → safest option is to unset
+                    os.environ.pop("OLIVE_SANDBOX_DIR", None)
 
 
 def get_project_root() -> Path:  # hot‑path – keep ultra‑cheap
@@ -81,6 +93,7 @@ def get_logs_root() -> Path:
     """`<project>/.olive/logs` – persistent logs."""
     return _ensure_dir(get_dot_olive() / "logs")
 
+
 def get_current_logs_dir() -> Path:
     """
     Host  → <project>/.olive/logs
@@ -92,7 +105,7 @@ def get_current_logs_dir() -> Path:
 # ──────────────────────────────────────────────────────────────
 # session‑id helpers  (only daemons / sandbox call generate)
 # ──────────────────────────────────────────────────────────────
-#@olive_management_command(":session")
+# @olive_management_command(":session")
 def get_session_id() -> str | None:
     return _SESSION_ID
 
@@ -186,6 +199,7 @@ def is_in_sandbox() -> bool:
     multi-stage builds, etc.
     """
     return os.getenv("IS_OLIVE_SANDBOX") == "1"
+
 
 def is_git_dirty() -> bool:
     from olive.context.utils import get_git_diff_stats

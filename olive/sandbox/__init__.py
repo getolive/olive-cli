@@ -25,6 +25,7 @@ import tarfile
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from enum import Enum, auto
 
 from rich.errors import LiveError
 from rich.markup import escape
@@ -33,7 +34,7 @@ from olive import env
 from olive.logger import get_logger
 from olive.preferences import prefs
 from olive.tasks.models import TaskSpec
-from olive.ui import console, console_lock, print_warning, print_info
+from olive.ui import console, console_lock, print_warning
 
 from olive.sandbox.utils import docker_required, get_container_name, get_mounts
 
@@ -55,51 +56,79 @@ def _safe_status(msg: str):
         yield console
 
 
+class BuildBackend(Enum):
+    """What toolchain will actually build container images for us?"""
+
+    DOCKER_BUILDX = auto()  # Docker CLI + Buildx extension available
+    PODMAN = auto()  # podman is aliased to `docker`; Buildx disabled
+    NONE = auto()  # sandbox disabled or Buildx unavailable
+
+
 @docker_required
-def _safe_ensure_buildx() -> None:
+def ensure_build_backend() -> BuildBackend:
     """
-    Make sure Docker Buildx is installed and an active builder exists.
-    Creates a container‐driver builder named 'olive-builder' the first time.
+    Verify we have *some* image-building backend and prepare it if needed.
+
+    Returns
+    -------
+    BuildBackend
+        • DOCKER_BUILDX if Docker Buildx is ready (creates `olive-builder` on first run)
+        • PODMAN        if `docker` is really a Podman alias ⇒ skip Buildx flags
+        • NONE          if sandbox is disabled in preferences
     """
     if not prefs.is_sandbox_enabled():
-        return
+        return BuildBackend.NONE
 
-    if shutil.which("docker") is None:
-        raise RuntimeError("Docker not found – install Docker to use Olive sandbox.")
+    docker_path = shutil.which("docker")
+    if not docker_path:
+        raise RuntimeError(
+            "`docker` CLI not found – install Docker/Podman or disable the sandbox."
+        )
 
-    # 1) Is buildx sub-command present?
+    # Detect Podman masquerading as docker (common: `alias docker=podman`)
+    docker_real = os.path.realpath(docker_path)
+    if "podman" in docker_real.lower():
+        logger.info("Detected Podman alias – Buildx will be skipped.")
+        return BuildBackend.PODMAN
+
+    # 1.  Ensure the Buildx sub-command itself exists
     if (
         subprocess.run(["docker", "buildx", "version"], capture_output=True).returncode
         != 0
     ):
-        raise RuntimeError("Docker Buildx is not available (Docker ≥20.10 required).")
+        raise RuntimeError("Docker Buildx is unavailable (Docker ≥ 20.10 required).")
 
-    # 2) Do we already have a usable builder?
+    # 2.  Is there already an active builder?
     inspect = subprocess.run(
         ["docker", "buildx", "inspect"], capture_output=True, text=True
     )
     if inspect.returncode == 0 and "Driver:" in inspect.stdout:
-        return  # we’re good
+        return BuildBackend.DOCKER_BUILDX  # all good, nothing to do
 
-    ctx_vsp = env.get_project_root() / ".venv"
+    # 3.  We need to create a builder (first run)
+    ctx_vsp: Path = env.get_project_root() / ".venv"
     if not ctx_vsp.exists():
         raise RuntimeError(".venv missing from build context – check .dockerignore")
 
-    # 3) No builder yet – create one
-    subprocess.check_call(
-        [
-            "docker",
-            "buildx",
-            "create",
-            "--name",
-            "olive-builder",
-            "--driver",
-            "docker-container",
-            "--bootstrap",  # start the buildx container now
-            "--use",  # set as current
-        ]
-    )
-    logger.info("Created and bootstrapped Docker buildx builder 'olive-builder'.")
+    try:
+        subprocess.check_call(
+            [
+                "docker",
+                "buildx",
+                "create",
+                "--name",
+                "olive-builder",
+                "--driver",
+                "docker-container",
+                "--bootstrap",
+                "--use",
+            ]
+        )
+        logger.info("Created and bootstrapped Docker Buildx builder 'olive-builder'.")
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"Failed to create Buildx builder: {exc}") from exc
+
+    return BuildBackend.DOCKER_BUILDX
 
 
 # ──────────────────────────────────────────────────────────────
@@ -109,7 +138,7 @@ class SandboxManager:
     def __init__(self) -> None:
         self.container_name: str | None = None
         self.log_path: Path = env.get_logs_root() / "sandbox.log"  # ensures dir
-        _safe_ensure_buildx() # builder ready
+        _ = ensure_build_backend()  # builder ready
 
     # ────────────────────────────────────────────── build phase
     def write_dockerignore(self) -> None:
@@ -177,13 +206,18 @@ class SandboxManager:
         """
         # ── quick-out if nothing changed ───────────────────────────────
         self.write_dockerignore()
-        _safe_ensure_buildx()
-        refresh_required = self._auto_refresh() or force
+        backend: BuildBackend = ensure_build_backend()
 
+        if backend is BuildBackend.NONE:
+            logger.info("Sandbox disabled – skipping image build.")
+            return
+
+        refresh_required = self._auto_refresh() or force
         if not refresh_required:
             logger.info("Sandbox image is current – skipping rebuild.")
             return
 
+        # ── paths & snapshot bookkeeping (unchanged) ─────────────────────
         proj_root = env.get_project_root()
         dot_olive = env.get_dot_olive()  # project-local .olive
         sbx_root = env.get_sandbox_root()
@@ -192,40 +226,39 @@ class SandboxManager:
         backup_dir = sbx_root / "old_snapshots"
         backup_dir.mkdir(exist_ok=True)
 
-        comp_hash = self._snapshot_hash()  # still includes prefs / prompts
+        comp_hash = self._snapshot_hash()  # includes prefs/prompts
         image_tag = f"olive/sandbox:{comp_hash[:12]}"
 
         # ── stage Olive LIB source ( /olive ) ──────────────────────────
-        olive_proj = env.get_resource_path("olive")  # robust for namespace/editable
+        olive_proj = env.get_resource_path("olive")
         olive_stage = sbx_root / "staging" / "olive"
         olive_hash = self._hash_directory(olive_proj)
         olive_hashf = sbx_root / ".olive_src_hash"
-        if (
-            not olive_stage.exists() or olive_hashf.read_text()
-            if olive_hashf.exists()
-            else "" != olive_hash
-        ):
+
+        if (not olive_stage.exists()) or (
+            olive_hashf.read_text() if olive_hashf.exists() else ""
+        ) != olive_hash:
             if olive_stage.exists():
                 shutil.rmtree(olive_stage)
             shutil.copytree(olive_proj, olive_stage, symlinks=False)
             olive_hashf.write_text(olive_hash)
 
-        # ── snapshot project .olive WITHOUT its sandbox dir ────────────
+        # ── snapshot project .olive WITHOUT its sandbox dir ──────────────
         if snapshot.exists():
             ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
             with tarfile.open(backup_dir / f"snapshot_{ts}.tar.gz", "w:gz") as tar:
                 tar.add(snapshot, arcname=".olive-snapshot")
             shutil.rmtree(snapshot)
 
-        def _ignore(d, names):
-            # top-level .olive/sandbox is skipped; nested returns empty set
+        def _ignore(d: str, names: list[str]) -> set[str]:
+            # Skip top-level .olive/sandbox only
             return {"sandbox"} if Path(d).samefile(dot_olive) else set()
 
         shutil.copytree(dot_olive, snapshot, ignore=_ignore)
         self._disable_sandbox(snapshot / "preferences.yml")
         marker.write_text(comp_hash)
 
-        # ── render Dockerfile ──────────────────────────────────────────
+        # ── render Dockerfile if needed ──────────────────────────────────
         tmpl = env.get_resource_path("olive.sandbox", "Dockerfile.template")
         dockerfile = sbx_root / "Dockerfile"
         rendered = self._render_dockerfile(tmpl)
@@ -238,16 +271,27 @@ class SandboxManager:
             )
             logger.info("Dockerfile refreshed.")
 
-        # ── build with Buildx (inline cache) ───────────────────────────
-        cmd = [
-            "docker",
-            "buildx",
-            "build",
-            "--load",
-            "--cache-to",
-            "type=inline",
-            "--cache-from",
-            "type=inline",
+        # ── choose build command for backend ─────────────────────────────
+        if backend is BuildBackend.DOCKER_BUILDX:
+            cmd = [
+                "docker",
+                "buildx",
+                "build",
+                "--load",
+                "--cache-to",
+                "type=inline",
+                "--cache-from",
+                "type=inline",
+            ]
+            env_vars = {**os.environ, "DOCKER_BUILDKIT": "1"}
+        elif backend is BuildBackend.PODMAN:  # Buildx unavailable
+            cmd = ["docker", "build"]  # alias → podman
+            env_vars = os.environ.copy()
+        else:  # just in case
+            raise RuntimeError(f"Unsupported build backend: {backend!r}")
+
+        # tags and context are common to all backends
+        cmd += [
             "-t",
             image_tag,
             "-t",
@@ -256,8 +300,8 @@ class SandboxManager:
             str(dockerfile),
             str(proj_root),
         ]
-        env_vars = {**os.environ, "DOCKER_BUILDKIT": "1"}
 
+        # ── build & stream logs ──────────────────────────────────────────
         with _safe_status("Building sandbox image…") as st:
             proc = subprocess.Popen(  # noqa: S603
                 cmd,
@@ -267,17 +311,17 @@ class SandboxManager:
                 text=True,
                 errors="replace",
             )
-            assert proc.stdout
+            assert proc.stdout  # for mypy
             for ln in proc.stdout:
                 msg = ANSI_RE.sub("", ln).rstrip()
                 if msg:
-                    logger.debug("[buildx] %s", msg)
+                    logger.debug("[build] %s", msg)
                     with console_lock():
                         st.update(f"[secondary]{escape(msg[:80])}[/secondary]")
             proc.wait()
 
         if proc.returncode:
-            raise RuntimeError("Docker buildx failed – see log for details.")
+            raise RuntimeError("Container build failed – see log for details.")
         logger.info("✅ Sandbox image built → %s", image_tag)
 
     # ────────────────────────────────────────────── lifecycle
@@ -605,15 +649,14 @@ class SandboxManager:
 
         # 3 · Instantiate the template ----------------------------------
         body = (
-                template.read_text()
-                .replace("{{ olive_user }}", "olive")
-                .replace("{{ olive_source_path }}", str(source_rel))
-                .replace("{{ olive_prefs_snapshot }}", str(snapshot_rel))
-                .replace("{{ extra_apt_packages }}", str(extra_pkg_str))
+            template.read_text()
+            .replace("{{ olive_user }}", "olive")
+            .replace("{{ olive_source_path }}", str(source_rel))
+            .replace("{{ olive_prefs_snapshot }}", str(snapshot_rel))
+            .replace("{{ extra_apt_packages }}", str(extra_pkg_str))
         )
 
         return banner + "\n" + body.strip() + "\n"
-
 
     def _watched_paths(self) -> list[Path]:
         """Return every file that should trigger a rebuild when it changes."""
@@ -631,7 +674,9 @@ class SandboxManager:
             "context", "system_prompt_path", default=".olive/settings/system_prompt.md"
         )
         builder_prompt = prefs.get(
-            "builder_mode", "prompt_path", default=".olive/settings/builder_mode_prompt.txt"
+            "builder_mode",
+            "prompt_path",
+            default=".olive/settings/builder_mode_prompt.txt",
         )
         paths += [
             (proj_root / sys_prompt).resolve(),
@@ -643,7 +688,9 @@ class SandboxManager:
         """Composite SHA-1 of project tree + watched config files."""
         import hashlib
 
-        h = hashlib.sha1(self._hash_directory(env.get_dot_olive() / "settings/").encode())
+        h = hashlib.sha1(
+            self._hash_directory(env.get_dot_olive() / "settings/").encode()
+        )
         for p in self._watched_paths():
             if p.exists():
                 h.update(p.read_bytes())
