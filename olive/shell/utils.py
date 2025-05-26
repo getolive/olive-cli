@@ -1,19 +1,122 @@
 # olive/shell/utils.py
 
+from __future__ import annotations
+
 import json
+import signal
 import subprocess
 import tempfile
 from asyncio.subprocess import PIPE, create_subprocess_exec
 from enum import Enum, auto
 from pathlib import Path
 from shutil import which
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
+import asyncio
+import os
+import sys
+import functools
+import inspect
+from contextlib import contextmanager
+from rich.errors import LiveError
 
 from olive.logger import get_logger
 from olive.preferences import prefs
 from olive.ui import console, print_error
 
 logger = get_logger(__name__)
+
+
+@contextmanager
+def _maybe_spinner(message: str, spinner: str):
+    """
+    Yield a Rich status spinner when no other Live display is active.
+    When already inside one, degrade gracefully to a plain console.
+    """
+    try:
+        with console.status(message, spinner=spinner) as st:
+            yield st
+    except LiveError:
+        # Nested live display — just yield the console so `.update()` etc. still work
+        yield console
+
+def cancellable(
+    *,
+    spinner: str = "dots",
+    message: str = "[bold cyan]Working…[/bold cyan]",
+    on_cancel: Callable[..., None] | None = None,
+    run_in_executor: bool | None = None,  # auto-detect by default
+):
+    """
+    Wrap an async *or* sync function so that:
+      • A Rich spinner is shown while it runs.
+      • Raw Ctrl-C (0x03) during the spinner *cancels immediately*.
+      • Optional `on_cancel()` callback fires (sync or async).
+    """
+
+    def decorator(fn):
+        async def _run(*args, **kwargs):
+            loop = asyncio.get_running_loop()
+
+            # ---- 1. decide whether the wrapped fn is blocking or coroutine
+            is_coro = inspect.iscoroutinefunction(fn)
+            run_in_exec = (
+                bool(run_in_executor) if run_in_executor is not None else not is_coro
+            )
+
+            if run_in_exec:
+                call = functools.partial(fn, *args, **kwargs)
+                task = loop.run_in_executor(None, call)
+            else:
+                task = asyncio.create_task(fn(*args, **kwargs))
+
+            # ---- 2. listen for raw ^C while prompt toolkit is suspended
+            ctrlc = asyncio.Event()
+
+            def _on_sigint(signum, frame):
+                ctrlc.set()
+
+            def _on_stdin():
+                try:
+                    if os.read(sys.stdin.fileno(), 1) == b"\x03":
+                        ctrlc.set()
+                except BlockingIOError:
+                    pass  # incomplete byte
+
+            loop.add_reader(sys.stdin.fileno(), _on_stdin)
+            prev = signal.getsignal(signal.SIGINT)
+            signal.signal(signal.SIGINT, _on_sigint)
+
+            try:
+                with _maybe_spinner(message=message, spinner=spinner):
+                    ctrlc_task = asyncio.create_task(ctrlc.wait())
+                    try:
+                        done, _ = await asyncio.wait(
+                            {task, ctrlc_task},
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                    finally:
+                        # be tidy: if Ctrl-C did *not* fire, cancel the `wait()` task
+                        if not ctrlc_task.done():
+                            ctrlc_task.cancel()
+
+                    if ctrlc.is_set():
+                        task.cancel()
+                        if on_cancel:
+                            if inspect.iscoroutinefunction(on_cancel):
+                                await on_cancel()
+                            else:
+                                on_cancel()
+                        raise asyncio.CancelledError
+
+                    return await task  # task finished normally
+            finally:
+                loop.remove_reader(sys.stdin.fileno())
+                signal.signal(signal.SIGINT, prev)
+
+        functools.update_wrapper(_run, fn)
+        return _run
+
+    return decorator
 
 
 async def run_task_subprocess(spec_id: str) -> dict:

@@ -121,10 +121,10 @@ def dump_context():
     console.print(f"[green]✅ Context dumped to:[/green] {tmp.name}")
 
 
-@olive_management_command(":payload-summary")
+@olive_management_command(":messages")
 def summarize_llm_payload(arg: str = None):
     """\
-    Summarize and inspect details of llm context payload (:payload-summary <id> --> detail view)
+    Summarize and inspect details of llm interactions and payloads (:messages <id> --> detail view)
     """
     llm = LLMProvider()
     messages, stats = llm.build_payload("(payload summary)", dry_run=True)

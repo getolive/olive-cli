@@ -3,7 +3,6 @@ olive.init – project boot‑strapper for Olive CLI
 ===============================================
 This module is the single canonical place responsible for **creating**,
 **validating** and **displaying** the state of an Olive installation.
-
 It fulfils six key requirements (see PR‑spec):
 
 1. `initialize_olive(path: str | Path | None = None)` may be invoked from

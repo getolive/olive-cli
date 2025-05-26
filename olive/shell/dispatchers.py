@@ -3,6 +3,7 @@
 import inspect
 import shlex
 import subprocess
+import asyncio
 
 from rich.markup import MarkupError
 
@@ -14,7 +15,7 @@ from olive.tools import tool_registry
 from olive.sandbox import sandbox
 
 from olive.preferences.admin import get_prefs_lazy
-from olive.ui import console, print_error, print_success, print_warning
+from olive.ui import console, print_error, print_success, print_warning, print_info
 
 from .utils import _render_tool_result
 
@@ -126,7 +127,11 @@ async def _dispatch_llm(user_input: str, interactive: bool):
     Send any plain input to the LLM as a fallback.
     """
     logger.info("User prompt:\n%s", user_input)
-    response = await llm.ask(user_input)
+    try:
+        response = await llm.ask(user_input)
+    except asyncio.CancelledError:
+        print_info("request cancelled (ctrl+c)")
+        return
     logger.info("Olive response:\n%s", response)
 
     if interactive:

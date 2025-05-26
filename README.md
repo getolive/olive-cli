@@ -92,7 +92,7 @@ Once inside the Olive shell (`olive shell`), you can interact in several ways:
   - Commands for controlling Olive itself (not sent to the AI).
     _Examples:_
     `:help`
-    `:payload-summary`
+    `:messages`
     `:tools`
     `:spec complete 1`
 - **Shell commands (`!`):**

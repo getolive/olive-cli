@@ -1,6 +1,8 @@
 import pytest
 import subprocess
 from pathlib import Path
+from olive import init
+import os
 
 
 # ───────────────────────────────────────────────────────────────
@@ -31,8 +33,17 @@ def set_olive_project_root_early(tmp_path_factory):
     from olive.init import initialize_olive
     from olive.env import set_project_root
 
+    # monkeypatch.setattr(env, "get_user_root", lambda: user_root)
+    # monkeypatch.setattr(init, "USER_OLIVE", user_root)
     set_project_root(test_root)
     initialize_olive(test_root)
+    print("DEBUG: HOME =", os.environ.get("HOME"))
+    print("DEBUG: USER_OLIVE =", init.USER_OLIVE)
+    print("DEBUG: USER_OLIVE exists =", init.USER_OLIVE.exists())
+    print(
+        "DEBUG: USER_OLIVE/preferences.yml exists =",
+        (init.USER_OLIVE / "preferences.yml").exists(),
+    )
     return test_root
 
 

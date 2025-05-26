@@ -22,6 +22,7 @@ import shutil
 import signal
 import subprocess
 import tarfile
+import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -251,10 +252,18 @@ class SandboxManager:
             shutil.rmtree(snapshot)
 
         def _ignore(d: str, names: list[str]) -> set[str]:
-            # Skip top-level .olive/sandbox only
-            return {"sandbox"} if Path(d).samefile(dot_olive) else set()
+            # Never copy the live build context or volatile runtime artefacts
+            if Path(d).samefile(dot_olive):
+                return {"sandbox", "run"}
+            return set()
 
-        shutil.copytree(dot_olive, snapshot, ignore=_ignore)
+        # The temp dir **must not be inside `.olive`**, otherwise the dest
+        # becomes a child of the source and copytree chases its own tail.
+        with tempfile.TemporaryDirectory(prefix="olive_snapshot_") as tmpdir:
+            tmp_snapshot = Path(tmpdir) / ".olive-snapshot"
+            shutil.copytree(dot_olive, tmp_snapshot, ignore=_ignore, symlinks=False)
+            shutil.move(tmp_snapshot, snapshot)  # atomic rename into place
+
         self._disable_sandbox(snapshot / "preferences.yml")
         marker.write_text(comp_hash)
 
@@ -718,4 +727,3 @@ class SandboxManager:
 sandbox = SandboxManager()
 atexit.register(sandbox.stop)
 signal.signal(signal.SIGTERM, lambda *_: sandbox.stop())
-signal.signal(signal.SIGINT, lambda *_: sandbox.stop())
