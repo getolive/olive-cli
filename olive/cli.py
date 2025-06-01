@@ -12,8 +12,16 @@ from olive.init import initialize_olive, validate_olive
 from olive.shell import run_interactive_shell
 from olive.tasks.runner import run_task_from_file
 from olive.tools.admin import tools_summary_command
+from olive.env import is_in_sandbox
 
 app = typer.Typer(help="Olive: Local AI Dev Shell")
+
+# import the voice module if we aren't in sandbox
+if not is_in_sandbox():
+    from olive.voice.cli import voice_app  # noqa: E402  (import after app defined)
+
+    # Add the voice module's sub-cli
+    app.add_typer(voice_app, name="voice")
 
 # Global flags container
 global_flags = {"daemon": False}
@@ -212,6 +220,7 @@ def run_task_command(
     """
     initialize_olive()
     from olive.tools import tool_registry
+    from olive.tasks.runner import run_task_from_file_json
 
     tool_registry.discover_all(install=False)
     if json:

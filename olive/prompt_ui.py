@@ -13,9 +13,11 @@ import glob
 import time
 import inspect
 import shutil
+import threading
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.application import get_app_or_none
 from prompt_toolkit.completion import Completer, Completion, PathCompleter
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.document import Document
@@ -32,8 +34,7 @@ logger = get_logger(__name__)
 # ─── Prompt Styling ────────────────────────────────────────────────
 
 # Extract the 'prompt' style string from our shared OLIVE_THEME
-_prompt_style = str(OLIVE_THEME.styles["prompt"])
-style = Style.from_dict({"prompt": _prompt_style})
+_prompt_style = str(OLIVE_THEME.styles.get("prompt", ""))
 
 prompt_symbol = prefs.get("ui", "prompt", default="🫒")
 olive_prompt = HTML(f"<prompt>{prompt_symbol} </prompt>")
@@ -230,6 +231,71 @@ def force_submit(event):
     event.app.current_buffer.validate_and_handle()
 
 
+# ─── Airline (status bar) ──────────────────────────────────────────
+# We expose a tiny setter so other modules (voice, debugger, etc.)
+# can push one-line status messages.  Empty ⇒ bar is hidden.
+
+# ─── Airline ownership -------------------------------------------------
+
+_AIRLINE_LOCK = threading.RLock()
+_AIRLINE_OWNER = None  # str | None
+
+
+def acquire_airline(owner: str):
+    global _AIRLINE_OWNER
+    _AIRLINE_LOCK.acquire()
+    _AIRLINE_OWNER = owner
+
+
+def release_airline(owner: str):
+    global _AIRLINE_OWNER
+    if _AIRLINE_OWNER == owner:
+        _AIRLINE_OWNER = None
+    _AIRLINE_LOCK.release()
+
+
+_airline_text: str = ""
+
+
+def _airline_text_get() -> str:
+    """safe getter for snapshot"""
+    return _airline_text
+
+
+def set_airline(text: str, *, owner: str | None = None) -> None:
+    global _airline_text
+    with _AIRLINE_LOCK:
+        if _AIRLINE_OWNER is None or _AIRLINE_OWNER == owner:
+            _airline_text = text
+
+    app = get_app_or_none()
+    if app:
+        # schedule invalidate on the UI thread whether we’re on it or not
+        app.invalidate()
+
+
+# Toolbar callback: PT calls this on every repaint.
+def _airline_toolbar() -> HTML | str:
+    return HTML(f"<airline>{_airline_text}</airline>") if _airline_text else ""
+
+
+# ─── Prompt-Toolkit style (auto-pulls colours from OLIVE_THEME) ─────
+# ─── Prompt-Toolkit style (auto-pulls colours from OLIVE_THEME) ────
+toolbar_bg = OLIVE_THEME.styles["airline-bg"]  # "#1a1b26"
+toolbar_fg = OLIVE_THEME.styles["airline-fg"]  # "#c0caf5"
+
+style = Style.from_dict(
+    {
+        "prompt": _prompt_style,
+        "bottom-toolbar": f"noreverse bg:{toolbar_bg} {toolbar_fg}",
+        # ↓ here: convert Rich.Style → str
+        "airline": str(OLIVE_THEME.styles["prompt"]),
+        "airline_bg": f"bg:{toolbar_bg}",
+        "airline_fg": f"bold {toolbar_fg}",
+    }
+)
+
+
 # ─── Shell Session ─────────────────────────────────────────────────
 
 session = PromptSession(
@@ -237,4 +303,5 @@ session = PromptSession(
     key_bindings=bindings,
     style=style,
     multiline=True,
+    bottom_toolbar=_airline_toolbar,  # ← airline hooked in here
 )

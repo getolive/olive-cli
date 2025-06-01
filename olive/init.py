@@ -38,10 +38,14 @@ from rich.table import Table
 from rich.tree import Tree
 
 from olive import env
+
 import olive.canonicals.admin  # noqaF401 side‑effect: register CLI commands  # type: ignore
 import olive.context.admin  # noqa:F401 side‑effect: register CLI commands
 import olive.sandbox.admin  # noqa:F401 side‑effect: register CLI commands
 import olive.tasks.admin  # noqa:F401 side‑effect: register CLI commands
+
+if not env.is_in_sandbox():
+    import olive.voice.admin  # noqa:F401 side‑effect: register CLI commands
 
 from olive.context import context
 from olive.canonicals import canonicals_registry
@@ -306,13 +310,20 @@ def initialize_shell_session() -> None:
     if enabled—start / display the Docker sandbox session ID.  Used by the
     `olive shell` command and unit-tests.
     """
-    from olive.env import generate_session_id, get_session_id, is_git_dirty
+    from olive.env import (
+        generate_session_id,
+        get_session_id,
+        is_git_dirty,
+        is_in_sandbox,
+    )
     from olive.preferences.admin import get_prefs_lazy
     from olive.sandbox import sandbox
 
     # fresh session ID for every shell
     generate_session_id()
     console.print("[bold green]🌱 Welcome to Olive Shell[/bold green]\n")
+
+    prefs = get_prefs_lazy()
 
     # tool inventory
     tools = tool_registry.list()
@@ -335,7 +346,6 @@ def initialize_shell_session() -> None:
         )
 
     # optional sandbox spin-up
-    prefs = get_prefs_lazy()
     if prefs.is_sandbox_enabled():
         if not sandbox.is_running():
             try:
@@ -344,3 +354,15 @@ def initialize_shell_session() -> None:
                 print_error(f"Failed to start sandbox: {exc}")
                 return
         console.print(f"[dim]sandbox session: {get_session_id()}[/dim]\n")
+
+    # Kick-off background init as soon as admin.py is imported
+    if prefs.get("voice", "enabled") and not is_in_sandbox():
+        from olive.voice import runtime as voice_runtime
+
+        try:
+            voice_runtime.ensure_ready()
+            print_info("[bold]Voice Mode is enabled and ready.[/bold]\n")
+            logger.info("voice bootstrap succeeded")
+        except Exception as e:
+            print_error(f"Voice Mode failed to ready itself: {str(e)}\n")
+            logger.debug("voice bootstrap failed", exc_info=True)

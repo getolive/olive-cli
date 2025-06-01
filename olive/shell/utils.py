@@ -16,28 +16,14 @@ import os
 import sys
 import functools
 import inspect
-from contextlib import contextmanager
-from rich.errors import LiveError
 
 from olive.logger import get_logger
 from olive.preferences import prefs
 from olive.ui import console, print_error
+from olive.ui.spinner import safe_status as _maybe_spinner
 
 logger = get_logger(__name__)
 
-
-@contextmanager
-def _maybe_spinner(message: str, spinner: str):
-    """
-    Yield a Rich status spinner when no other Live display is active.
-    When already inside one, degrade gracefully to a plain console.
-    """
-    try:
-        with console.status(message, spinner=spinner) as st:
-            yield st
-    except LiveError:
-        # Nested live display — just yield the console so `.update()` etc. still work
-        yield console
 
 def cancellable(
     *,

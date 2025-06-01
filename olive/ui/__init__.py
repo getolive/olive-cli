@@ -6,27 +6,25 @@ from rich.console import Console
 from rich.theme import Theme
 
 # ─── Default Olive Color Scheme ─────────────────────────────────────────
-# A palette centered on olive greens, with complementary accents.
+# ─── TokyoNight-flavoured Olive theme ─────────────────────────────
+# Reference: https://github.com/folke/tokyonight.nvim (Night style)
 OLIVE_THEME = Theme(
     {
-        # Primary brand color
-        "primary": "bold #556B2F",  # Dark Olive Green
-        # Secondary accent
-        "secondary": "#6B8E23",  # Olive Drab
-        # Success / positive feedback
-        "success": "#9ACD32",  # Yellow Green
-        # Warnings
-        "warning": "bold #FFA500",  # Orange
-        # Errors
-        "error": "bold #8B0000",  # Dark Red
-        # Informational / less prominent
-        "info": "dim #778899",  # Light Slate Gray
-        # Highlights / calls to action
-        "highlight": "bold magenta",
-        # Prompt styling
-        "prompt": "bold #6B8E23",  # Olive Drab Bold
+        # Brand / primary interaction
+        "primary": "bold #7aa2f7",  # Blue (Tokyonight "blue")
+        "secondary": "#bb9af7",  # Purple
+        "success": "#9ece6a",  # Green
+        "warning": "bold #e0af68",  # Yellow/Orange
+        "error": "bold #f7768e",  # Red
+        "info": "dim #7dcfff",  # Cyan
+        "highlight": "bold #ff9e64",  # Peach highlight
+        "prompt": "bold #7aa2f7",  # Same blue as primary
+        # Airline / toolbar classes (new)
+        "airline-bg": "#1a1b26",  # Tokyonight background
+        "airline-fg": "#c0caf5",  # Light foreground text
     }
 )
+
 
 # Shared console instance using the olive theme
 console = Console(theme=OLIVE_THEME)

@@ -106,7 +106,8 @@ async def _dispatch_tool_call(user_input: str, interactive: bool):
         if interactive:
             print_success(f"Tool dispatched as background task: {task_id}")
 
-            with console.status("[highlight]Thinking…[/highlight]", spinner="dots"):
+            from olive.ui.spinner import safe_status
+            with safe_status("Thinking…", spinner="dots"):
                 result = await task_manager.wait_for_result(task_id)
 
             _render_tool_result(result)

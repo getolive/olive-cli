@@ -68,5 +68,13 @@ sandbox:
     extra_apt_packages:
     # - cowsay  # Uncomment to add apt packages for the sandbox Dockerfile
 
+voice:
+  enabled: false 
+  verbose: false
+  partial_model: "tiny.en"
+  full_model: "distil-medium.en"
+  models_dir: "~/.olive/models/voice"
+  input_device: null
+
 ui:
   prompt: "\U0001FAD2"

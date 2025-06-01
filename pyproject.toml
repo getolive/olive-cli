@@ -80,3 +80,13 @@ syntax = [
     "tree_sitter_lua<1",
     "tree_sitter_commonlisp<1",
 ]
+
+voice = [
+    # Speech-to-text (offline Whisper v3 models, CTranslate2 backend)
+    "faster-whisper>=1.1.1",     # pulls in ctranslate2>=4.6.0 automatically 
+
+    # Live audio + DSP
+    "sounddevice>=0.5.2",
+    "numpy>=2.2.6",
+    "scipy>=1.15.3",
+]

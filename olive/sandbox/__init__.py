@@ -23,38 +23,23 @@ import signal
 import subprocess
 import tarfile
 import tempfile
-from contextlib import contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from enum import Enum, auto
 
-from rich.errors import LiveError
 from rich.markup import escape
 
 from olive import env
 from olive.logger import get_logger
 from olive.preferences import prefs
 from olive.tasks.models import TaskSpec
-from olive.ui import console, console_lock, print_warning
+from olive.ui import console_lock, print_warning
+from olive.ui.spinner import safe_status as _safe_status
 
 from olive.sandbox.utils import docker_required, get_container_name, get_mounts
 
 logger = get_logger("sandbox")
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-
-
-# ──────────────────────────────────────────────────────────────
-# Helper: Rich spinner that never explodes
-# ──────────────────────────────────────────────────────────────
-@contextmanager
-def _safe_status(msg: str):
-    try:
-        with console.status(f"[highlight]{msg}[/highlight]", spinner="dots") as st:
-            yield st
-    except LiveError:
-        # Already inside a live display – fall back to plain text
-        print(f"[dim]{msg} …[/dim]")
-        yield console
 
 
 class BuildBackend(Enum):

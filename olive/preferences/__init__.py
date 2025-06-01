@@ -9,7 +9,7 @@ class Preferences:
     def __init__(self):
         self.prefs: dict = {}
         self.initialized: bool = False
-        self._ensure_loaded() # lazy-load on initial import
+        self._ensure_loaded()  # lazy-load on initial import
 
     def get_preferences_path(self):
         prefs_path = env.get_dot_olive() / "settings" / "preferences.yml"
@@ -84,79 +84,50 @@ class Preferences:
             "yes",
         )
 
-    def pretty_summary(self):
-        """Returns a structured dict of preferences organized by section"""
-        return {
-            "⚙️ Context Settings": [
-                (
-                    "context.include.patterns",
-                    self.get("context", "include", "patterns"),
-                ),
-                ("context.include.paths", self.get("context", "include", "paths")),
-                (
-                    "context.exclude.patterns",
-                    self.get("context", "exclude", "patterns"),
-                ),
-                ("context.exclude.paths", self.get("context", "exclude", "paths")),
-                ("context.max_files", self.get("context", "max_files")),
-                (
-                    "context.max_lines_per_file",
-                    self.get("context", "max_lines_per_file"),
-                ),
-                ("context.max_tokens", self.get("context", "max_tokens")),
-                ("context.respect_gitignore", self.get("context", "respect_gitignore")),
-                (
-                    "context.system_prompt_path",
-                    self.get("context", "system_prompt_path"),
-                ),
-            ],
-            "🧠 AI Settings": [
-                ("ai.model", self.get("ai", "model")),
-                ("ai.provider", self.get("ai", "provider")),
-                ("ai.temperature", self.get("ai", "temperature")),
-                ("ai.base_url", self.get("ai", "base_url")),
-            ],
-            "🔧 AI Tools": [
-                ("ai.tools.mode", self.get("ai", "tools", "mode")),
-                ("ai.tools.whitelist", self.get("ai", "tools", "whitelist")),
-                ("ai.tools.blacklist", self.get("ai", "tools", "blacklist")),
-            ],
-            "🧰 Builder Mode": [
-                ("builder_mode.autonomy", self.get("builder_mode", "autonomy")),
-                (
-                    "builder_mode.confidence_threshold",
-                    self.get("builder_mode", "confidence_threshold"),
-                ),
-                ("builder_mode.prompt_path", self.get("builder_mode", "prompt_path")),
-            ],
-            "🚨 Code Smells": [
-                ("code_smells.enabled", self.get("code_smells", "enabled")),
-                ("code_smells.linters", self.get("code_smells", "linters")),
-                (
-                    "code_smells.flags.consistent_formatting",
-                    self.get("code_smells", "flags", "consistent_formatting"),
-                ),
-                (
-                    "code_smells.flags.enforce_type_hints",
-                    self.get("code_smells", "flags", "enforce_type_hints"),
-                ),
-                (
-                    "code_smells.flags.no_todo_comments",
-                    self.get("code_smells", "flags", "no_todo_comments"),
-                ),
-            ],
-            "🖥️ UI": [
-                ("ui.prompt", self.get("ui", "prompt")),
-            ],
-            "📊 LLM Settings": [
-                ("llm.model", self.get("llm", "model")),
-                ("llm.temperature", self.get("llm", "temperature")),
-                ("llm.api_base", self.get("llm", "api_base")),
-            ],
-            "🔒 Other": [
-                ("sandbox.enabled", self.get("sandbox", "enabled")),
-            ],
-        }
+    def get_section(
+        self,
+        *keys: str,
+        default: Any | None = None,
+        cast: str = "dict",
+    ):
+        """
+        Fetch an entire nested section.
+
+        Parameters
+        ----------
+        *keys
+            Hierarchical keys, e.g. ``"voice"`` or ``"ai", "tools"``.
+        default
+            Fallback if the section is missing (defaults to empty dict).
+        cast
+            * ``"dict"``  → raw ``dict`` (default)
+            * ``"obj"``   → try to instantiate ``<Capitalized>Settings`` from
+              ``olive.<top-key>.models`` using Pydantic; falls back to dict if
+              the model isn’t found or validation fails.
+
+        Examples
+        --------
+        >>> prefs.get_section("voice")                # plain dict
+        >>> prefs.get_section("voice", cast="obj")    # VoiceSettings object
+        """
+        data = self.get(*keys, default=default or {})
+        if cast == "dict":
+            return data or {}
+
+        if cast == "obj":
+            import importlib
+
+            top = keys[0] if keys else ""
+            try:
+                mdl = importlib.import_module(f"olive.{top}.models")
+                cls_name = f"{top.capitalize()}Settings"
+                cls = getattr(mdl, cls_name)
+                return cls.parse_obj(data or {})
+            except Exception:
+                # graceful fallback – caller still gets a dict
+                return data or {}
+
+        raise ValueError(f"Unsupported cast: {cast!r}")
 
 
 prefs = Preferences()
