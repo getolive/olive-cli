@@ -1,6 +1,6 @@
 [project]
 name = "olive"
-version = "0.1.0"
+version = "0.1.1"
 description = "Olive CLI & HTTP"
 
 # ---------------------------------------------------------------------------
@@ -89,4 +89,7 @@ voice = [
     "sounddevice>=0.5.2",
     "numpy>=2.2.6",
     "scipy>=1.15.3",
+    # Deep-learning backend – platform-matched wheels &
+    # CUDA / MPS handled automatically by pip
+    "torch>=2.7,<3",
 ]
