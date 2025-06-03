@@ -93,3 +93,6 @@ voice = [
     # CUDA / MPS handled automatically by pip
     "torch>=2.7,<3",
 ]
+
+[tool.uv]                 # ❶ Let uv auto-detect the best backend.
+torch-backend = "auto"    #     (cpu / cu126 / cu121 / rocm / metal…)
