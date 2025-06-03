@@ -347,7 +347,13 @@ class SpeechRecognizer:
             if len(self._vad_buf) >= VAD_BATCH_FRAMES:
                 frames = self._vad_buf
                 self._vad_buf = []  # start new batch
-                self._last_vad_prob = await asyncio.to_thread(self._vad_batch, frames)
+                try:
+                    self._last_vad_prob = await asyncio.to_thread(self._vad_batch, frames)
+                except RuntimeError as e:
+                    # This happens if Olive is shutting down and the thread pool is already closed
+                    if "cannot schedule new futures after shutdown" in str(e):
+                        return  # or break, or exit the loop cleanly
+                    raise
             prob = self._last_vad_prob
 
             if prob > VAD_THRESHOLD:  # speech detected

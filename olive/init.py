@@ -34,18 +34,11 @@ import sys
 from pathlib import Path
 from typing import List, Sequence, Tuple
 
+
 from rich.table import Table
 from rich.tree import Tree
 
 from olive import env
-
-import olive.canonicals.admin  # noqaF401 side‑effect: register CLI commands  # type: ignore
-import olive.context.admin  # noqa:F401 side‑effect: register CLI commands
-import olive.sandbox.admin  # noqa:F401 side‑effect: register CLI commands
-import olive.tasks.admin  # noqa:F401 side‑effect: register CLI commands
-
-if not env.is_in_sandbox():
-    import olive.voice.admin  # noqa:F401 side‑effect: register CLI commands
 
 from olive.context import context
 from olive.canonicals import canonicals_registry
@@ -53,6 +46,16 @@ from olive.logger import get_logger
 from olive.preferences.admin import prefs_show_summary
 from olive.tools import tool_registry
 from olive.ui import console, print_error, print_info, print_warning
+from olive.ui.spinner import safe_status
+
+if not env.is_in_sandbox():
+    import olive.voice.admin  # noqa:F401 side‑effect: register CLI commands
+
+import olive.canonicals.admin  # noqaF401 side‑effect: register CLI commands  # type: ignore
+import olive.context.admin  # noqa:F401 side‑effect: register CLI commands
+import olive.sandbox.admin  # noqa:F401 side‑effect: register CLI commands
+import olive.tasks.admin  # noqa:F401 side‑effect: register CLI commands
+
 
 __all__ = [
     "initialize_olive",

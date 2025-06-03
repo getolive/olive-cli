@@ -6,13 +6,13 @@ import subprocess
 import sys
 import typer
 
-from olive.context import context
 from olive.daemon import process_manager
 from olive.init import initialize_olive, validate_olive
 from olive.shell import run_interactive_shell
 from olive.tasks.runner import run_task_from_file
 from olive.tools.admin import tools_summary_command
 from olive.env import is_in_sandbox
+from olive.ui.spinner import safe_status
 
 app = typer.Typer(help="Olive: Local AI Dev Shell")
 
@@ -60,7 +60,7 @@ def shell() -> None:
     from olive.init import initialize_olive
     from olive.logger import get_logger
     from olive.preferences.admin import get_prefs_lazy
-    from olive.sandbox import SandboxManager
+    from olive.sandbox import sandbox
 
     # 1. Initialise (fatal on mis-configuration)
     initialize_olive()  # cwd, enforces Git repo & prefs
@@ -77,9 +77,8 @@ def shell() -> None:
     # 3. Tidy-up
     try:
         if prefs.is_sandbox_enabled():
-            sbx = SandboxManager()
-            if sbx.is_running():
-                sbx.stop()
+            if sandbox.is_running():
+                sandbox.stop()
     except Exception as exc:  # pragma: no cover
         logger.warning("[Olive] Exception during sandbox cleanup: %s", exc)
 
@@ -96,6 +95,7 @@ def context_command():
 @app.command("context-files")
 def context_files_command():
     """Dump full content of all files marked for inclusion in context to stdout."""
+    from olive.context import context
     payload = context._build_context_payload()
     print(payload)
 
