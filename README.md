@@ -6,8 +6,11 @@
 # install (minimal)
 uv pip install "git+https://github.com/getolive/olive-cli.git"
 
-# install (recommended, PEP508 with all optionals included)
+# install (recommended, PEP508 with all optionals except voice included)
 uv pip install "olive[dev,http,syntax] @ git+https://github.com/getolive/olive-cli.git"
+
+# install (PEP508 with all optionals including voice included)
+uv pip install "olive[dev,http,syntax,voice] @ git+https://github.com/getolive/olive-cli.git"
 ```
 
 # initialization
