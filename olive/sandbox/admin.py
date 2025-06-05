@@ -20,7 +20,7 @@ from olive.prompt_ui import olive_management_command
 from olive.sandbox import sandbox
 from olive.ui import console
 
-from .utils import docker_required
+from .utils import docker_ready
 
 logger = get_logger("sandbox")
 
@@ -47,7 +47,7 @@ def _docker_stats(name: str) -> tuple[str, str] | tuple[None, None]:
 
 # ───────────────────────── commands ─────────────────────────
 @olive_management_command(":sandbox")
-@docker_required
+@docker_ready
 def sandbox_status_command() -> None:
     """Show status of the Olive sandbox container."""
     logger.info("Queried sandbox status.")
@@ -66,7 +66,7 @@ def sandbox_status_command() -> None:
 
 
 @olive_management_command(":sandbox-start")
-@docker_required
+@docker_ready
 def sandbox_start_command(*args: Any) -> None:
     """Start the Olive sandbox container. Use `:sandbox-start --force` to rebuild the image."""
     force_build = "--force" in args
@@ -90,7 +90,7 @@ def sandbox_start_command(*args: Any) -> None:
 
 
 @olive_management_command(":sandbox-stop")
-@docker_required
+@docker_ready
 def sandbox_stop_command() -> None:
     """Stop and remove the Olive sandbox container."""
     if not sandbox.is_running():
@@ -102,7 +102,7 @@ def sandbox_stop_command() -> None:
 
 
 @olive_management_command(":sandbox-restart")
-@docker_required
+@docker_ready
 def sandbox_restart_command() -> None:
     """Restart the Olive sandbox container."""
     if not sandbox.is_running():
@@ -114,7 +114,7 @@ def sandbox_restart_command() -> None:
 
 
 @olive_management_command(":sandbox-logs")
-@docker_required
+@docker_ready
 def sandbox_logs_command() -> None:
     """Stream recent logs from the sandbox container (Ctrl-C to quit)."""
     if not sandbox.is_running():
@@ -133,7 +133,7 @@ def sandbox_logs_command() -> None:
 
 
 @olive_management_command(":sandbox-attach")
-@docker_required
+@docker_ready
 def sandbox_attach_command() -> None:
     """Attach to the sandbox tmux session (Ctrl+B then D to detach)."""
     if not sandbox.is_running():

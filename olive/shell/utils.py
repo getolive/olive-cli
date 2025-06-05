@@ -243,21 +243,21 @@ def _render_tool_result(result: Any) -> None:
     shape = _analyse_result(result)
     match shape:
         case ResultShape.PLAIN_TEXT:
-            console.print(result)
+            console.print(result, markup=False)
 
         case ResultShape.TOOL_STD:
             out = str(result.get("stdout", "") or "")
             if out.rstrip():
-                console.print(out.rstrip())
+                console.print(out.rstrip(), markup=False)
             err = str(result.get("stderr", "") or "")
             if err.rstrip():
-                print_error(err.rstrip())
+                print_error(err.rstrip(), markup=False)
             if (rc := result.get("returncode")) is not None:
                 if rc != 0:
                     console.print(f"[dim]exit code {rc}[/dim]")
 
         case ResultShape.GENERIC_DICT:
-            console.print(Pretty(result, max_string=120))
+            console.print(Pretty(result, max_string=120), markup=False)
 
         case ResultShape.OTHER:
             console.print(Pretty(result))

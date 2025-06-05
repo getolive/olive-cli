@@ -26,8 +26,11 @@ COMMANDS = get_management_commands()
 
 async def dispatch(user_input: str, interactive: bool):
     """Route input based on its prefix: management, tool, shell, or fallback to LLM."""
+
     if not user_input.strip():
         return
+
+    
     # Management commands (e.g., :exit, :prefs, :tools) are always handled first
     if user_input.strip().startswith(":"):
         return await _dispatch_management(user_input, interactive)
@@ -37,17 +40,7 @@ async def dispatch(user_input: str, interactive: bool):
         return _dispatch_shell_exec(user_input[1:].strip())
     if user_input.strip().startswith("@"):
         return _dispatch_atcommand(user_input)
-    # Sandbox guard: block commands if sandbox is required but not running
-
-    prefs = get_prefs_lazy()
-    if prefs.is_sandbox_enabled() and not sandbox.is_running():
-        from olive.ui import print_warning
-
-        print_warning(
-            "Sandbox is enabled in preferences, but is not running. Command not dispatched. Use :sandbox-start to start it."
-        )
-        return
-
+    
     # All other input: LLM fallback
     return await _dispatch_llm(user_input, interactive)
 
@@ -93,6 +86,14 @@ async def _dispatch_tool_call(user_input: str, interactive: bool):
     Dispatch an async tool invocation via `!!tool_name [args]`.
     Show a spinner while we wait, then clear it and print the final result.
     """
+    prefs = get_prefs_lazy()
+    if prefs.is_sandbox_enabled() and not sandbox.is_running():
+        from olive.ui import print_warning
+        print_warning(
+            "Sandbox is enabled in preferences, but is not running. Command not dispatched. Use :sandbox-start to start it."
+        )
+        return
+
     # parse out the tool name + args
     _, rest = user_input.split("!!", 1)
     parts = rest.strip().split(maxsplit=1)
@@ -137,7 +138,12 @@ async def _dispatch_llm(user_input: str, interactive: bool):
 
     if interactive:
         try:
-            console.print(f"[prompt]🤖[/prompt] [primary]{response}[/primary]\n")
+            from rich.markdown import Markdown
+            _resp = Markdown(response)
+            console.print("[prompt]🤖[/prompt]")
+            console.print(_resp)
+            console.print("\n")
+            #console.print(f"[prompt]🤖[/prompt] [primary]{response}[/primary]\n", markup=False)
         except MarkupError:
             print_warning(f":warning:⚠️ 🤖 {response}\n")
     else:

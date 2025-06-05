@@ -8,23 +8,43 @@ from rich.theme import Theme
 # ─── Default Olive Color Scheme ─────────────────────────────────────────
 # ─── TokyoNight-flavoured Olive theme ─────────────────────────────
 # Reference: https://github.com/folke/tokyonight.nvim (Night style)
+
 OLIVE_THEME = Theme(
     {
         # Brand / primary interaction
-        "primary": "bold #7aa2f7",  # Blue (Tokyonight "blue")
-        "secondary": "#bb9af7",  # Purple
-        "success": "#9ece6a",  # Green
-        "warning": "bold #e0af68",  # Yellow/Orange
-        "error": "bold #f7768e",  # Red
-        "info": "dim #7dcfff",  # Cyan
-        "highlight": "bold #ff9e64",  # Peach highlight
-        "prompt": "bold #7aa2f7",  # Same blue as primary
-        # Airline / toolbar classes (new)
-        "airline-bg": "#1a1b26",  # Tokyonight background
-        "airline-fg": "#c0caf5",  # Light foreground text
+        "primary": "bold #7aa2f7",  # Tokyonight blue
+        "secondary": "#bb9af7",  # Tokyonight purple/magenta
+        "success": "#9ece6a",  # Tokyonight green
+        "warning": "bold #e0af68",  # Tokyonight yellow
+        "error": "bold #f7768e",  # Tokyonight red
+        "info": "dim #7dcfff",  # Tokyonight cyan
+        "highlight": "bold #ff9e64",  # Tokyonight orange/peach
+        "prompt": "bold #7aa2f7",  # Tokyonight blue
+        # Airline / toolbar classes
+        "airline-bg": "#1a1b26",  # True background
+        "airline-fg": "#c0caf5",  # True foreground
+        # Markdown refinements
+        "markdown.code": "bold #ff9e64",  # Peach for code blocks
+        "markdown.code_block": "bold #ff9e64",  # Explicit for code blocks (some Rich versions)
+        "markdown.h1": "bold #7aa2f7",  # Primary blue for H1
+        "markdown.h2": "bold #bb9af7",  # Secondary purple for H2
+        "markdown.h3": "#7dcfff",  # Cyan for H3
+        "markdown.bold": "bold #c0caf5",  # Foreground bright
+        "markdown.italic": "italic #bb9af7",  # Italic purple
+        "markdown.block_quote": "#565f89",  # Dim comment color
+        "markdown.list_item": "#c0caf5",  # Foreground
+        "markdown.hr": "#3b4261",  # Border color
+        "markdown.link": "underline #7aa2f7",  # Underlined blue
+        "markdown.table_border": "#3b4261",  # Table border
+        # Add additional keys if you want to theme, e.g. inline code, etc.
+        "markdown.inline_code": "#ff9e64",
+        # Fallback/foreground
+        "repr.number": "#e0af68",  # Numbers in code
+        "repr.str": "#9ece6a",  # Strings in code
+        "repr.bool_true": "#7aa2f7",
+        "repr.bool_false": "#f7768e",
     }
 )
-
 
 # Shared console instance using the olive theme
 console = Console(theme=OLIVE_THEME)

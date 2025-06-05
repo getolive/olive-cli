@@ -24,7 +24,7 @@ from olive import env  # single source-of-truth helpers
 from olive.logger import get_logger
 from olive.preferences import prefs
 from olive.tasks.models import TaskSpec
-from .utils import get_container_name
+from .utils import docker_ready, get_container_name
 
 logger = get_logger("sandbox")
 
@@ -97,42 +97,81 @@ def _ensure_docker_assets() -> None:
             shutil.copy2(src, dst)
 
 
+import importlib.resources as import_resources
+import importlib.metadata as import_metadata
+
 # ───────────────── locate olive sources ───────────────────────
 def _olive_source_path() -> Optional[Path]:
     """
-    Best-effort directory holding Olive's pyproject.toml
+    Locate the *source* root of Olive – the directory that owns ``pyproject.toml``.
+
+    Strategy (stop at first hit):
+
+    1. ``$OLIVE_SOURCE_PATH``                      – explicit > implicit.
+    2. Walk parents of ``Path(__file__)``          – editable install or in-repo run.
+    3. ``importlib.resources.files(__package__)``  – PEP 302/451 canonical origin.
+    4. Inspect the *distribution* (``*.dist-info``) – allows recovery even from
+       a wheel *if* the wheel includes ``pyproject.toml``.
+    5. Fallback: ``None`` so caller can decide (e.g. raise, warn, clone repo).
+
+    Returns
+    -------
+    pathlib.Path | None
+        Absolute path to the directory that contains ``pyproject.toml``, or
+        ``None`` if it cannot be located with high confidence.
     """
-    override = os.getenv("OLIVE_SOURCE_DIR")
-    if override and (Path(override) / "pyproject.toml").exists():
-        return Path(override)
+    # 1 ────────────────────────────────────────────────────────────────────────
+    env = os.getenv("OLIVE_SOURCE_PATH")
+    if env:
+        p = Path(env).expanduser().resolve()
+        if (p / "pyproject.toml").is_file():
+            return p
 
-    pyproj = env.get_project_root() / "pyproject.toml"
-    if pyproj.exists():
-        import tomllib
+    # helper: climb until a sentinel file is found
+    def _find_in_parents(start: Path, sentinel: str) -> Optional[Path]:
+        for parent in start.resolve().parents:
+            if (parent / sentinel).is_file():
+                return parent
+        return None
 
-        try:
-            if tomllib.loads(pyproj.read_text())["project"]["name"] == "olive":
-                return env.get_project_root()
-        except Exception:  # noqa: BLE001
-            pass
+    # 2 ────────────────────────────────────────────────────────────────────────
+    here_based = _find_in_parents(Path(__file__), "pyproject.toml")
+    if here_based:
+        return here_based
 
+    # 3 ────────────────────────────────────────────────────────────────────────
     try:
-        import olive
-        import json as _json  # noqa: F401
-
-        dist = next(
-            p for p in Path(olive.__file__).parents if p.name.endswith(".dist-info")
-        )
-        direct = dist / "direct_url.json"
-        if direct.exists():
-            url = _json.loads(direct.read_text()).get("url", "")
-            if url.startswith("file://"):
-                src = Path(url[7:])
-                if (src / "pyproject.toml").exists():
-                    return src
-    except Exception:  # noqa: BLE001
+        pkg_root = import_resources.files(__package__).resolve()
+        resource_based = _find_in_parents(pkg_root, "pyproject.toml")
+        if resource_based:
+            return resource_based
+    except ModuleNotFoundError:  # very unlikely, but play safe
         pass
+
+    # 4 ────────────────────────────────────────────────────────────────────────
+    for dist_name in ("olive-cli", "olive"):
+        try:
+            dist = import_metadata.distribution(dist_name)
+        except import_metadata.PackageNotFoundError:
+            continue
+
+        base = Path(dist.locate_file("")).resolve()
+        dist_based = _find_in_parents(base, "pyproject.toml")
+        if dist_based:
+            return dist_based
+
+        # Wheel did not ship pyproject.toml – search RECORD for it (rare but legal)
+        record_path = dist.locate_file("RECORD")
+        if record_path.is_file():
+            with record_path.open(encoding="utf-8") as fh:
+                for line in fh:
+                    fpath = line.split(",", 1)[0]
+                    if fpath.endswith("pyproject.toml"):
+                        return Path(dist.locate_file(fpath)).parent
+
+    # 5 ────────────────────────────────────────────────────────────────────────
     return None
+
 
 
 # ───────────────── wheel builder / stager ─────────────────────
@@ -241,6 +280,7 @@ class _Sandbox:
         return _build_container_name()
 
     # ----------------------- build ----------------------------
+    @docker_ready
     def build(self, *, force: bool = False) -> None:
         _ensure_docker_assets()
 
@@ -284,6 +324,7 @@ class _Sandbox:
             _cleanup_stage()
 
     # ----------------------- lifecycle ------------------------
+    @docker_ready
     def start(self, force_build: bool = False) -> None:
         self.build(force=force_build)
         if self.is_running():
@@ -317,6 +358,7 @@ class _Sandbox:
         )
         print(f"[sandbox] started {cid[:12]} {self.container_name}")
 
+    @docker_ready
     def stop(self) -> None:
         if self.is_running():
             _sh(["docker", "rm", "-f", self.container_name])
@@ -328,12 +370,16 @@ class _Sandbox:
 
     # ----------------------- info -----------------------------
     def is_running(self) -> bool:
-        return bool(
-            _sh(
-                ["docker", "ps", "-q", "-f", f"name={self.container_name}"],
-                capture=True,
+        try:
+            return bool(
+                _sh(["docker", "ps", "-q", "-f",
+                     f"name={self.container_name}"], capture=True)
             )
-        )
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # daemon unreachable or CLI vanished → treat as “not running”
+            return False
+
+    
 
     def logs(self, *, tail: int = 120, follow: bool = False) -> None:
         if not self.is_running():
