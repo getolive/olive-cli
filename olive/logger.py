@@ -1,5 +1,4 @@
 # cli/olive/logger.py
-# cli/olive/logger.py
 """
 olive.logger
 ============
@@ -16,7 +15,6 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Dict
 
-from olive import env
 
 # ─────────────────────────── internals
 _LOCK = threading.RLock()
@@ -35,8 +33,9 @@ def _initial_log_path() -> Path:
     the unsuffixed host file and never change it later, even if a sandbox
     starts and sets a session-id.
     """
-    logs_dir = env.get_current_logs_dir()
-    sid = env.get_session_id()
+    from olive.env import get_current_logs_dir, get_session_id
+    logs_dir = get_current_logs_dir()
+    sid = get_session_id()
     name = f"olive_session_{sid}.log" if sid else "olive_session.log"
     return logs_dir / name
 

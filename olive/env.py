@@ -83,6 +83,9 @@ def get_dot_olive() -> Path:
     """`<project>/.olive` – lazily created on first call."""
     return _ensure_dir(get_project_root() / ".olive")
 
+def get_dot_olive_settings() -> Path:
+    """`<project>/.olive` – lazily created on first call."""
+    return _ensure_dir(get_dot_olive() / "settings")
 
 def get_run_root() -> Path:
     """`<project>/.olive/run` – ephemeral runtime data (tasks, sbx, …)."""
@@ -105,17 +108,21 @@ def get_current_logs_dir() -> Path:
 # ──────────────────────────────────────────────────────────────
 # session‑id helpers  (only daemons / sandbox call generate)
 # ──────────────────────────────────────────────────────────────
-# @olive_management_command(":session")
 def get_session_id() -> str | None:
     return _SESSION_ID
 
 
 def generate_session_id() -> str:
     """
-    Create & export a fresh, short session‑id.
-    Called by SandboxManager.start() **before** launching the container.
+    Return the current session-id if present, otherwise create & export a fresh
+    8-char hex id.  Called by SandboxManager.start() on the host **before**
+    the container is launched.
     """
     global _SESSION_ID
+
+    if _SESSION_ID:                 # already generated in this process
+        return _SESSION_ID
+
     _SESSION_ID = uuid.uuid4().hex[:8]
     os.environ["OLIVE_SESSION_ID"] = _SESSION_ID
     return _SESSION_ID

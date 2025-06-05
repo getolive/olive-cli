@@ -46,7 +46,6 @@ from olive.logger import get_logger
 from olive.preferences.admin import prefs_show_summary
 from olive.tools import tool_registry
 from olive.ui import console, print_error, print_info, print_warning
-from olive.ui.spinner import safe_status
 
 if not env.is_in_sandbox():
     import olive.voice.admin  # noqa:F401 side‑effect: register CLI commands
@@ -323,8 +322,9 @@ def initialize_shell_session() -> None:
     from olive.sandbox import sandbox
 
     # fresh session ID for every shell
-    generate_session_id()
-    console.print("[bold green]🌱 Welcome to Olive Shell[/bold green]\n")
+    sid = generate_session_id()
+
+    console.print(f"[bold green]🌱 Welcome to Olive Shell ({str(sid)})[/bold green]\n")
 
     prefs = get_prefs_lazy()
 
@@ -353,6 +353,7 @@ def initialize_shell_session() -> None:
         if not sandbox.is_running():
             try:
                 sandbox.start()
+                console.print(f"Sandbox started: ")
             except Exception as exc:
                 print_error(f"Failed to start sandbox: {exc}")
                 return

@@ -1,0 +1,2 @@
+# MANIFEST.in for olive-cli
+recursive-include olive/sandbox Dockerfile entrypoint.sh

@@ -40,7 +40,7 @@ requires-python = ">=3.11"
 olive = "olive.cli:app"
 
 [tool.setuptools]
-packages = { find = { include = ["olive*"] } }
+packages = { find = { include = ["olive*"], exclude = ["*.tests*", "*.__pycache__"] } }
 include-package-data = true
 
 [tool.setuptools.package-data]
@@ -92,7 +92,5 @@ voice = [
     # Deep-learning backend – platform-matched wheels &
     # CUDA / MPS handled automatically by pip
     "torch>=2.7,<3",
+    "torchaudio>=2.7,<3",
 ]
-
-[tool.uv]                 # ❶ Let uv auto-detect the best backend.
-torch-backend = "auto"    #     (cpu / cu126 / cu121 / rocm / metal…)

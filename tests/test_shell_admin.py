@@ -11,10 +11,12 @@ def test_print_project_root(monkeypatch):
 
 
 def test_perform_graceful_exit(monkeypatch):
+    # Patch sandbox to prevent dependency on shell session state
+    monkeypatch.setattr("olive.sandbox.sandbox.is_running", lambda: False)
+    monkeypatch.setattr("olive.sandbox.sandbox.stop", lambda: None)
     with patch("olive.shell.admin.sys.exit") as sys_exit:
         shell_admin.perform_graceful_exit()
         sys_exit.assert_called_once_with(0)
-
 
 def test_exit_command(monkeypatch):
     with patch("olive.shell.admin.perform_graceful_exit") as pe:

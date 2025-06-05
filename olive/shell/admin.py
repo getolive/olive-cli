@@ -44,6 +44,9 @@ def perform_graceful_exit(*args, **kwargs):
     """Perform all Olive shell cleanup and exit the process."""
     logger.info("User exited Olive Shell.")
     # Place for future cleanup hooks, flushes, etc.
+    from olive.sandbox import sandbox
+    if sandbox.is_running():
+        sandbox.stop()
     sys.exit(0)
 
 

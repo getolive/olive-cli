@@ -36,12 +36,16 @@ def tasks_list_command(arg: str = None):
     )
 
     if single_task_partial:
-        matches = [tid for tid, _ in sorted_tasks if tid.startswith(single_task_partial)]
+        matches = [
+            tid for tid, _ in sorted_tasks if tid.startswith(single_task_partial)
+        ]
         if not matches or len(matches) <= 0:
             print_error(f"No match found for task id partial {single_task_partial}")
             return
         elif len(matches) > 1:
-            print_warning(f"Multiple matches for '{single_task_partial}': {', '.join(matches)}. Showing first.")
+            print_warning(
+                f"Multiple matches for '{single_task_partial}': {', '.join(matches)}. Showing first."
+            )
 
         task_get_command(matches[0], show_only_rendered_result=True)
         return
@@ -71,7 +75,9 @@ def tasks_list_command(arg: str = None):
             else (
                 "red"
                 if status == "failed"
-                else "yellow" if status == "pending" else "dim"
+                else "yellow"
+                if status == "pending"
+                else "dim"
             )
         )
         start_human = (
@@ -106,6 +112,7 @@ def task_get_command(task_id: str = None, show_only_rendered_result=False):
 
     if show_only_rendered_result:
         from olive.shell.utils import _render_tool_result
+
         _render_tool_result(task.result)
     else:
         # ✅ Handles all serialization cases safely
