@@ -5,14 +5,13 @@ import signal
 import subprocess
 import sys
 import typer
-
+import re
 from olive.daemon import process_manager
 from olive.init import initialize_olive, validate_olive
 from olive.shell import run_interactive_shell
 from olive.tasks.runner import run_task_from_file
 from olive.tools.admin import tools_summary_command
 from olive.env import is_in_sandbox
-from olive.ui.spinner import safe_status
 
 app = typer.Typer(help="Olive: Local AI Dev Shell")
 
@@ -27,6 +26,21 @@ if not is_in_sandbox():
 global_flags = {"daemon": False}
 
 
+def get_version_from_pyproject():
+    here = os.path.abspath(os.path.dirname(__file__))
+    root = os.path.abspath(os.path.join(here, ".."))
+    pyproject_path = os.path.join(root, "pyproject.toml")
+    try:
+        with open(pyproject_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
+        if match:
+            return match.group(1)
+    except Exception:
+        pass
+    return "unknown"
+
+
 @app.callback()
 def main_callback(
     ctx: typer.Context,
@@ -36,6 +50,17 @@ def main_callback(
         help="Run Olive in background (daemon mode)",
         is_eager=True,
         show_default=False,
+    ),
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        is_eager=True,
+        help="Show Olive version and exit",
+        show_default=False,
+        callback=lambda value: (print(get_version_from_pyproject()) or sys.exit(0))
+        if value
+        else None,
     ),
 ):
     global_flags["daemon"] = daemon
@@ -96,6 +121,7 @@ def context_command():
 def context_files_command():
     """Dump full content of all files marked for inclusion in context to stdout."""
     from olive.context import context
+
     payload = context._build_context_payload()
     print(payload)
 
