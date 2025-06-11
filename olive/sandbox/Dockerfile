@@ -30,18 +30,22 @@ RUN /install-uv.sh && rm /install-uv.sh
 # $HOME isn’t defined at parse-time
 ENV PATH=/root/.local/bin:$PATH      
 
-# ─── Playwright + Chromium ──────────────────────────────────────────────
-RUN uv pip install --system --no-cache-dir "playwright==${PLAYWRIGHT_VERSION}" && \
-    mkdir -p /ms-playwright && chmod 0755 /ms-playwright && \
-    playwright install --with-deps chromium && \
-    chmod -R a+rX /ms-playwright
+# --- Create and activate venv before Python package installs, include pip (--seed) ---
+RUN uv venv --python=python${PY_VER%%-*} --seed /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
+
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN /opt/venv/bin/pip install --no-cache-dir "playwright==${PLAYWRIGHT_VERSION}" && \
+ mkdir -p /ms-playwright && chmod 0755 /ms-playwright && \
+ /opt/venv/bin/playwright install --with-deps chromium && \
+ chmod -R a+rX /ms-playwright
 
 
-# ─── isolated venv ──────────────────────────────────────────────────────
-RUN uv venv --python python /opt/venv
-# keeps /root/.local/bin via shell expansion
-ENV PATH=/opt/venv/bin:$PATH         
+###
+# Use this section for project-specific includes
+# e.g., if on python and have markdownify dependency:
+#   RUN /opt/venv/bin/pip install markdownify
+###
 
 # ─── Olive wheel (staged under .olive/sandbox/.build) ───────────────────
 COPY .olive/sandbox/.build/olive*.whl /tmp/wheels/
@@ -80,4 +84,3 @@ ENV IS_OLIVE_SANDBOX=1
 # ─── entrypoint ─────────────────────────────────────────────────────────
 COPY .olive/sandbox/entrypoint.sh /usr/local/bin/entrypoint.sh
 ENTRYPOINT ["tini","--","bash","/usr/local/bin/entrypoint.sh"]
-
