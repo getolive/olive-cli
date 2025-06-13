@@ -3,6 +3,9 @@
 ![Status](https://img.shields.io/badge/status-pre--v1,_experimental-orange)
 
 ```bash
+# setup venv (3.12 stable)
+uv venv --python=3.12
+
 # install (minimal)
 uv pip install "git+https://github.com/getolive/olive-cli.git"
 
