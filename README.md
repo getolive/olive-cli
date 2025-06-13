@@ -1,5 +1,5 @@
 # Olive CLI
-### llm-based operating system for engineers packaged as a terminal app
+### olive-cli is an llm-based operating system for engineers packaged as a terminal app.
 
 ![Status](https://img.shields.io/badge/status-pre--v1,_experimental-orange)
 
