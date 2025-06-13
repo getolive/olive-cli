@@ -65,7 +65,8 @@ source <project-root>/.venv/bin/activate
 olive shell
 ```
 
-This drops you into an Olive REPL (read-eval-print loop) where you can converse with the AI agent and issue special commands. Try `:help` to see all available commands. You can directly ask Olive to perform a task, for example:
+This drops you into the REPL which is the preferred way to interact live with olive-cli. Try `:help` in the repl to see all available commands.
+There are other ways to interact with olive-cli including as daemon and ad-hoc via commands with instruction payloads. 
 
 > **You:** “Please demo yourself: create a fizzbuzz program in python, create a fizzbuzz program in C. compile the C program as a library/module. update the python fizzbuzz program to call both the python fizzbuzz and the C fizzbuzz from the module and print out the results of both calls."
 
