@@ -44,7 +44,7 @@ packages = { find = { include = ["olive*"], exclude = ["*.tests*", "*.__pycache_
 include-package-data = true
 
 [tool.setuptools.package-data]
-"olive" = ["**/*", "!**/*.py"]
+"olive.dotfile_defaults" = ["*"]
 
 [tool.setuptools.data-files]
 "" = ["pyproject.toml", "MANIFEST.in"]

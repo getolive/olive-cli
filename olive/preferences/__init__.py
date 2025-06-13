@@ -84,6 +84,15 @@ class Preferences:
             "yes",
         )
 
+    def is_voice_enabled(self) -> bool:
+        vs = self.get_section("voice", cast="obj")
+        _enabled = (
+            vs.get("enabled", False)            # dict case
+            if isinstance(vs, dict)
+            else getattr(vs, "enabled", False)  # model object
+        )
+        return _enabled and not env.is_in_sandbox()
+
     def get_section(
         self,
         *keys: str,

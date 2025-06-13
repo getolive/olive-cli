@@ -1,2 +1,3 @@
 # MANIFEST.in for olive-cli
 recursive-include olive/sandbox Dockerfile entrypoint.sh
+recursive-include olive/dotfile_defaults *

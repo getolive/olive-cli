@@ -18,13 +18,15 @@ Single source‑of‑truth for:
 
 from __future__ import annotations
 
-import importlib.util
 import os
 import uuid
 from pathlib import Path
 from threading import Lock
-from typing import Optional
+from typing import Optional, Iterator
 from functools import lru_cache
+from importlib import resources as ir, util as iutil
+from importlib.resources.readers import MultiplexedPath
+from contextlib import contextmanager
 
 
 # ──────────────────────────────────────────────────────────────
@@ -83,9 +85,11 @@ def get_dot_olive() -> Path:
     """`<project>/.olive` – lazily created on first call."""
     return _ensure_dir(get_project_root() / ".olive")
 
+
 def get_dot_olive_settings() -> Path:
     """`<project>/.olive` – lazily created on first call."""
     return _ensure_dir(get_dot_olive() / "settings")
+
 
 def get_run_root() -> Path:
     """`<project>/.olive/run` – ephemeral runtime data (tasks, sbx, …)."""
@@ -120,7 +124,7 @@ def generate_session_id() -> str:
     """
     global _SESSION_ID
 
-    if _SESSION_ID:                 # already generated in this process
+    if _SESSION_ID:  # already generated in this process
         return _SESSION_ID
 
     _SESSION_ID = uuid.uuid4().hex[:8]
@@ -214,21 +218,32 @@ def is_git_dirty() -> bool:
     return bool(get_git_diff_stats())
 
 
-def get_resource_path(module_name: str, filename: Optional[str] = None) -> Path:
+@contextmanager
+def get_resource_path(pkg: str, name: Optional[str] = None) -> Iterator[Path]:
     """
-    Return an absolute path inside an installed (or editable) module.
+    Yield a real on-disk Path to *name* inside *pkg*.
 
-    Works for regular and namespace packages (PEP‑420).
+    Handles:
+      • regular wheels / zip-safe wheels
+      • editable installs on Python 3.12 (work-around synthetic path bug)
+      • namespace packages (PEP 420)
     """
-    spec = importlib.util.find_spec(module_name)
-    if not spec:
-        raise ImportError(f"Cannot locate module {module_name!r}")
+    try:
+        traversable = ir.files(pkg)               # ← original happy path
+    except NotADirectoryError:
+        # ───── editable-install workaround ─────
+        spec = iutil.find_spec(pkg)
+        if not spec or not spec.submodule_search_locations:
+            raise                                   # not our case → re-raise
 
-    if spec.origin:  # normal module
-        module_path = Path(spec.origin).parent
-    elif spec.submodule_search_locations:  # namespace pkg
-        module_path = Path(list(spec.submodule_search_locations)[0])
-    else:
-        raise ImportError(f"Cannot locate module root for {module_name!r}")
+        real_dirs = [p for p in spec.submodule_search_locations if Path(p).is_dir()]
+        if not real_dirs:
+            raise                                   # no real dirs → nothing we can do
 
-    return module_path / filename if filename else module_path
+        traversable = MultiplexedPath(*real_dirs)   # straddles all valid portions
+
+    if name:
+        traversable = traversable / name
+
+    with ir.as_file(traversable) as path:            # still zip-safe
+        yield path

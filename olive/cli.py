@@ -7,7 +7,7 @@ import sys
 import typer
 import re
 from olive.daemon import process_manager
-from olive.init import initialize_olive, validate_olive
+from olive.init import initialize_olive
 from olive.shell import run_interactive_shell
 from olive.tasks.runner import run_task_from_file
 from olive.tools.admin import tools_summary_command
@@ -17,10 +17,12 @@ app = typer.Typer(help="Olive: Local AI Dev Shell")
 
 # import the voice module if we aren't in sandbox
 if not is_in_sandbox():
-    from olive.voice.cli import voice_app  # noqa: E402  (import after app defined)
+    from olive.preferences import prefs
 
-    # Add the voice module's sub-cli
-    app.add_typer(voice_app, name="voice")
+    if prefs.is_voice_enabled():
+        from olive.voice.cli import voice_app 
+        # Add the voice module's sub-cli
+        app.add_typer(voice_app, name="voice")
 
 # Global flags container
 global_flags = {"daemon": False}
@@ -142,10 +144,12 @@ def context_dump_command():
     dump_context()
 
 
-@app.command("validate")
-def validate_command():
-    """Validate the Olive setup and configuration."""
-    validate_olive()
+@app.command("doctor")
+def doctor_command():
+    """Run the Olive diagnostics and health check suite."""
+    from olive.doctor import doctor_check
+
+    sys.exit(doctor_check())
 
 
 @app.command("tools")
