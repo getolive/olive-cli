@@ -56,16 +56,19 @@ https://github.com/user-attachments/assets/20f1964a-8e0d-42d0-a733-d42f6f840c57
 
 ## Quick Start
 
-Launch the interactive shell with:
+Launch the interactive shell with ```olive shell```:
 
 ```bash
-source <path-to-olive-cli>/.venv/bin/activate
+cd <project-root>
+uv venv --python=python3.12
+source <project-root>/.venv/bin/activate
 olive shell
 ```
 
 This drops you into an Olive REPL (read-eval-print loop) where you can converse with the AI agent and issue special commands. Try `:help` to see all available commands. You can directly ask Olive to perform a task, for example:
 
 > **You:** “Please demo yourself: create a fizzbuzz program in python, create a fizzbuzz program in C. compile the C program as a library/module. update the python fizzbuzz program to call both the python fizzbuzz and the C fizzbuzz from the module and print out the results of both calls."
+
 > **Olive:** *(analyzes project context, maybe creates a new Spec with the plan, or one-shots it if minimal ambiguity)* …
 
 Within the shell, lines starting with `:` are **meta-commands** for the Olive interface (not sent to the AI). Some useful ones:
