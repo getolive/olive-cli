@@ -39,8 +39,6 @@ astral's uv
 python 3.12 (venv)
 ```
 
-**Olive CLI** is designed for engineers who prefer teminal applications and are looking for an open, extensible, transparent, and optionally 100% local engineering utility that helps them get more done.
-
 https://github.com/user-attachments/assets/20f1964a-8e0d-42d0-a733-d42f6f840c57
 
 ## Key Features
